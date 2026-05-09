@@ -1,12 +1,15 @@
-import { useState, useEffect, useMemo } from 'react'
-import DeckGL from '@deck.gl/react'
-import { IconLayer, PathLayer, TextLayer } from '@deck.gl/layers'
-import { Map as MapGL } from 'react-map-gl/maplibre'
-import 'maplibre-gl/dist/maplibre-gl.css'
-import { MAP_STYLES } from '../../constants/mapStyles.ts'
-import { loadFeaturedAirports, type FeaturedAirport } from '../utils/featureAirports.ts'
-import { easeCubic } from '../utils/easings'
-import { buildPath } from '../utils/greatCirclePath.ts'
+import { useState, useEffect, useMemo } from "react"
+import DeckGL from "@deck.gl/react"
+import { IconLayer, PathLayer, TextLayer } from "@deck.gl/layers"
+import { Map as MapGL } from "react-map-gl/maplibre"
+import "maplibre-gl/dist/maplibre-gl.css"
+import { MAP_STYLES } from "../../constants/mapStyles.ts"
+import {
+  loadFeaturedAirports,
+  type FeaturedAirport,
+} from "../utils/featureAirports.ts"
+import { easeCubic } from "../utils/easings"
+// import { buildPath } from '../utils/greatCirclePath.ts'
 
 const INITIAL_VIEW_STATE = {
   longitude: 5,
@@ -17,23 +20,25 @@ const INITIAL_VIEW_STATE = {
 const AIRPORT_ICON_COLORS = {
   BLACK: [0, 0, 0, 215],
   GREEN: [39, 114, 29, 235],
-} as const;
+} as const
 
 const AIRPORT_LABEL_COLORS = {
   BLACK: [0, 0, 0, 215],
   GREEN: [39, 114, 29, 235],
-} as const;
+} as const
 
 export default function FlightMap() {
   const [airports, setAirports] = useState<FeaturedAirport[]>([])
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
-  const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(new Set())
+  const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(
+    new Set(),
+  )
 
   useEffect(() => {
     loadFeaturedAirports().then(setAirports)
   }, [])
 
-  const routePaths = useMemo(() => {
+  /* const routePaths = useMemo(() => {
     const selected = airports.filter(a => selectedAirportIds.has(a.iata))
     const paths: [number, number][][] = []
     for (let i = 0; i < selected.length; i++) {
@@ -111,18 +116,17 @@ export default function FlightMap() {
         getColor: { duration: 200, easing: easeCubic },
       }
     }),
-  ]
+  ] */
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <DeckGL
-          initialViewState={INITIAL_VIEW_STATE}
-          getCursor={({ isHovering }) => isHovering ? 'pointer' : 'grab'}
-          controller={true}
-          layers={layers}
+        initialViewState={INITIAL_VIEW_STATE}
+        getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
+        controller={true}
+        // layers={layers}
       >
-        <MapGL mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}/>
+        <MapGL mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR} />
       </DeckGL>
     </div>
   )
