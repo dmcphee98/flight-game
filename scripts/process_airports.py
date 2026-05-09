@@ -73,8 +73,8 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="data/processed/airports.min.json",
-        help="Path to output JSON (default: data/processed/airports.min.json)",
+        default="public/airports.min.json",
+        help="Path to output JSON (default: public/airports.min.json)",
     )
     parser.add_argument(
         "--columns",
