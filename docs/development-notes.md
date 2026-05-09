@@ -1,5 +1,10 @@
 # Development Notes
 
+## Table of contents
+
+- [Tooling](#tooling)
+- [Data Sources](#data-sources)
+
 ## Tooling
 
 ### Husky
@@ -42,3 +47,14 @@ Purpose:
 Configuration:
 - `commitlint.config.js`
 - Uses `@commitlint/config-conventional`
+
+## Data Sources
+
+### Airports dataset
+
+The raw airports dataset is downloaded manually from https://ourairports.com/data/
+
+- Public domain data
+- Updated daily
+- Includes global airport, runway, and navigation data
+- Used as the base input for the ETL pipeline that generates the game-ready dataset
