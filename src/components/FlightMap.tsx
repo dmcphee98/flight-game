@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import DeckGL from '@deck.gl/react'
-import { IconLayer, TextLayer } from '@deck.gl/layers'
+import { IconLayer, PathLayer, TextLayer } from '@deck.gl/layers'
 import { Map as MapGL } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MAP_STYLES } from '../../constants/mapStyles.ts'
 import { loadFeaturedAirports, type FeaturedAirport } from '../utils/featureAirports.ts'
 import { easeCubic } from '../utils/easings'
+import { buildPath } from '../utils/greatCirclePath.ts'
 
 const INITIAL_VIEW_STATE = {
   longitude: 5,
@@ -32,12 +33,32 @@ export default function FlightMap() {
     loadFeaturedAirports().then(setAirports)
   }, [])
 
+  const routePaths = useMemo(() => {
+    const selected = airports.filter(a => selectedAirportIds.has(a.iata))
+    const paths: [number, number][][] = []
+    for (let i = 0; i < selected.length; i++) {
+      for (let j = i + 1; j < selected.length; j++) {
+        const result = buildPath(selected[i].lon, selected[i].lat, selected[j].lon, selected[j].lat)
+        if (result) paths.push(result.line.geometry.coordinates as [number, number][])
+      }
+    }
+    return paths
+  }, [airports, selectedAirportIds])
+
   const layers = [
+    new PathLayer({
+      id: 'routes',
+      data: routePaths,
+      getPath: d => d,
+      getColor: [39, 114, 29, 135],
+      getWidth: 4,
+      widthUnits: 'pixels',
+    }),
     new IconLayer<FeaturedAirport>({
       id: 'airports-icon',
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getIcon: () => ({ url: '/dot2.png', width: 128, height: 128, mask: true }),
+      getIcon: () => ({ url: '/dot.png', width: 128, height: 128, mask: true }),
       getSize: d => d.iata === hoveredAirportId ? 32 : 24,
       getAngle: d => d.rotation,
       getColor: d => selectedAirportIds.has(d.iata) ? AIRPORT_ICON_COLORS.GREEN : AIRPORT_ICON_COLORS.BLACK,
