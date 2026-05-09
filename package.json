@@ -12,6 +12,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@turf/turf": "^7.3.5",
     "react-map-gl": "^8.1.1",
     "maplibre-gl": "^5.24.0",
     "deck.gl": "^9.3.2",
