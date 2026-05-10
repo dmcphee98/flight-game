@@ -81,6 +81,8 @@ function greedyPick(
 interface AirportsJson {
   /** Ordered column names corresponding to each inner array's positions. */
   schema: string[]
+  /** Ordered airport type names; each airport's type field is an index into this array. */
+  types: string[]
   airports: unknown[][]
 }
 
@@ -93,6 +95,7 @@ interface RawAirport {
   lon: number
   type: AirportType
 }
+
 
 /**
  * Decodes the columnar JSON, allocates per-tier quotas from `distribution`,
@@ -111,6 +114,7 @@ function parseAndSample(
 ): FeaturedAirport[] {
   const s = data.schema
   const c = (name: string) => s.indexOf(name)
+  const typeByInt = data.types as AirportType[]
 
   const all: RawAirport[] = data.airports.map(row => ({
     icao: row[c('icao')] as string,
@@ -118,7 +122,7 @@ function parseAndSample(
     name: row[c('name')] as string,
     lat: row[c('lat')] as number,
     lon: row[c('lon')] as number,
-    type: row[c('type')] as AirportType,
+    type: typeByInt[row[c('type')] as number] ?? 'small_airport',
   }))
 
   const { large = 0, medium = 0, small = 0 } = distribution

@@ -52,6 +52,17 @@ VALID_TYPES = {
     "closed",
 }
 
+# Stable ordering so integer values are consistent across runs
+TYPE_INT = {
+    "large_airport": 0,
+    "medium_airport": 1,
+    "small_airport": 2,
+    "heliport": 3,
+    "seaplane_base": 4,
+    "balloonport": 5,
+    "closed": 6,
+}
+
 
 def coerce(col, value):
     if col in NUMERIC_COLUMNS:
@@ -61,6 +72,8 @@ def coerce(col, value):
             return float(value)
         except ValueError:
             return None
+    if col == "type":
+        return TYPE_INT.get(value)
     return value if value != "" else None
 
 
@@ -125,6 +138,7 @@ def main():
         require_cols = []
 
     schema = [COLUMN_ALIASES[c] for c in args.columns]
+    types = [k for k, _ in sorted(TYPE_INT.items(), key=lambda x: x[1])]
     rows = []
 
     with open(args.input, newline="", encoding="utf-8") as f:
@@ -137,7 +151,7 @@ def main():
             row = [coerce(col, record.get(col, "")) for col in args.columns]
             rows.append(row)
 
-    output = {"schema": schema, "airports": rows}
+    output = {"schema": schema, "types": types, "airports": rows}
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
