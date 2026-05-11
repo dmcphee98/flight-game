@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-ETL script: data/raw/airports.csv -> data/processed/airports.min.json
+ETL script: raw/airports.csv -> public/data/airports.json
 
 Usage:
-  python scripts/process_airports.py
-  python scripts/process_airports.py --columns icao_code iata_code latitude_deg longitude_deg type name
-  python scripts/process_airports.py --types large_airport medium_airport
-  python scripts/process_airports.py --require icao_code iata_code
-  python scripts/process_airports.py --columns icao_code iata_code latitude_deg longitude_deg --types large_airport --require icao_code
+  python scripts/process_airport_info.py
+  python scripts/process_airport_info.py --columns icao_code iata_code latitude_deg longitude_deg type name
+  python scripts/process_airport_info.py --types large_airport medium_airport
+  python scripts/process_airport_info.py --require icao_code iata_code
+  python scripts/process_airport_info.py --columns icao_code iata_code latitude_deg longitude_deg --types large_airport --require icao_code
 
 Typical usage:
-  python scripts/process_airports.py --types large_airport medium_airport --require icao_code iata_code
+  python scripts/process_airport_info.py --types large_airport medium_airport --require icao_code iata_code
 """
 
 import argparse
@@ -18,6 +18,9 @@ import csv
 import json
 import os
 import sys
+
+INPUT = os.path.join(os.path.dirname(__file__), '..', 'raw', 'airports.csv')
+OUTPUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data', 'airports.json')
 
 # Column name -> short alias used as schema key in output
 COLUMN_ALIASES = {
@@ -80,16 +83,6 @@ def coerce(col, value):
 def main():
     parser = argparse.ArgumentParser(description="Process airports CSV to compact JSON.")
     parser.add_argument(
-        "--input",
-        default="data/raw/airports.csv",
-        help="Path to input CSV (default: data/raw/airports.csv)",
-    )
-    parser.add_argument(
-        "--output",
-        default="public/airports.min.json",
-        help="Path to output JSON (default: public/airports.min.json)",
-    )
-    parser.add_argument(
         "--columns",
         nargs="+",
         default=DEFAULT_COLUMNS,
@@ -141,7 +134,7 @@ def main():
     types = [k for k, _ in sorted(TYPE_INT.items(), key=lambda x: x[1])]
     rows = []
 
-    with open(args.input, newline="", encoding="utf-8") as f:
+    with open(INPUT, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for record in reader:
             if type_filter and record.get("type") not in type_filter:
@@ -153,11 +146,11 @@ def main():
 
     output = {"schema": schema, "types": types, "airports": rows}
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
+    with open(OUTPUT, "w", encoding="utf-8") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"Wrote {len(rows)} airports to {args.output}")
+    print(f"Wrote {len(rows)} airports to {OUTPUT}")
 
 
 if __name__ == "__main__":
