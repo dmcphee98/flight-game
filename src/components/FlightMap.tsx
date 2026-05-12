@@ -8,6 +8,9 @@ import { buildGameData } from '../utils/buildGameData.ts'
 import { easeCubic } from '../utils/easings'
 import { buildPath } from '../utils/greatCirclePath.ts'
 import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airportLookup.ts'
+import {buildEmitters, getActiveFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
+import {useSimulationClock} from "../hooks/useSimulationClock.ts";
+import SimulationControls from "./SimulationControls.tsx";
 
 const INITIAL_VIEW_STATE = {
   longitude: 5,
@@ -30,15 +33,23 @@ export default function FlightMap() {
   const [airportMeta, setAirportMeta] = useState<Map<string, AirportMeta>>(new Map())
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
   const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(new Set())
+  const [emitters, setEmitters] = useState<RouteEmitter[]>([])
+  const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
-      ([lookup, { icaoCodes }]) => {
+      ([lookup, { icaoCodes, routes }]) => {
         setAirports(icaoCodes.flatMap(icao => lookup.get(icao) ?? []))
         setAirportMeta(new Map(icaoCodes.map(icao => [icao, { iconRotation: airportRotation(icao) }])))
+        setEmitters(buildEmitters(routes, lookup))
       },
     )
   }, [])
+
+  const { activeFlights, activeEmitters } = useMemo(
+      () => getActiveFlights(emitters, simTime),
+      [emitters, simTime],
+  )
 
   const routePaths = useMemo(() => {
     const selected = airports.filter(a => selectedAirportIds.has(a.icao))
@@ -53,6 +64,25 @@ export default function FlightMap() {
   }, [airports, selectedAirportIds])
 
   const layers = [
+    new PathLayer({
+      id: 'flight-ghost-paths',
+      data: activeEmitters,
+      getPath: e => e.path,
+      getColor: [255, 165, 0, 160],
+      getWidth: 1,
+      widthUnits: 'pixels',
+      updateTriggers: { getColor: hoveredAirportId },
+    }),
+    new IconLayer({
+      id: 'aircraft',
+      data: activeFlights,
+      getPosition: f => f.position,
+      getIcon: () => ({ url: '/plane.svg', width: 64, height: 64, mask: true }),
+      getSize: 16,
+      getAngle: f => -f.heading,
+      getColor: [255, 140, 0, 255],
+      updateTriggers: { getColor: hoveredAirportId },
+    }),
     new PathLayer({
       id: 'routes',
       data: routePaths,
@@ -122,6 +152,14 @@ export default function FlightMap() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <SimulationControls
+          simTime={simTime}
+          playing={playing}
+          speed={speed}
+          play={play}
+          pause={pause}
+          setSpeed={setSpeed}
+      />
 
       <DeckGL
           initialViewState={INITIAL_VIEW_STATE}

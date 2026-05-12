@@ -7,16 +7,16 @@ export interface PathData {
 }
 
 export function buildPath(
-  originLon: number,
-  originLat: number,
+  origLon: number,
+  origLat: number,
   destLon: number,
   destLat: number,
 ): PathData | null {
-  const origin = turf.point([originLon, originLat])
+  const orig = turf.point([origLon, origLat])
   const dest = turf.point([destLon, destLat])
-  if (turf.distance(origin, dest, { units: 'kilometers' }) < 1) return null
+  if (turf.distance(orig, dest, { units: 'kilometers' }) < 1) return null
 
-  const gc = turf.greatCircle(origin, dest, { npoints: 100 })
+  const gc = turf.greatCircle(orig, dest, { npoints: 32 })
   const line = normalizeToLineString(gc)
   return { line, totalLength: turf.length(line, { units: 'kilometers' }) }
 }
