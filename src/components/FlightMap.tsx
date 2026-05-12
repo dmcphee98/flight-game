@@ -34,7 +34,16 @@ export default function FlightMap() {
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
   const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(new Set())
   const [emitters, setEmitters] = useState<RouteEmitter[]>([])
+  const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'x') setViewMode(m => m === 'outgoing' ? 'incoming' : 'outgoing')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
@@ -46,7 +55,7 @@ export default function FlightMap() {
     )
   }, [])
 
-  const { activeFlights, activeEmitters } = useMemo(
+  const { activeFlights } = useMemo(
       () => getActiveFlights(emitters, simTime),
       [emitters, simTime],
   )
@@ -66,12 +75,16 @@ export default function FlightMap() {
   const layers = [
     new PathLayer({
       id: 'flight-ghost-paths',
-      data: activeEmitters,
+      data: emitters,
       getPath: e => e.path,
-      getColor: [255, 165, 0, 160],
+      getColor: e => {
+        const match = viewMode === 'outgoing' ? e.origin : e.destination
+        if (match !== hoveredAirportId) return [0, 0, 0, 0]
+        return viewMode === 'outgoing' ? [145, 67, 232, 140] : [81, 201, 45, 160]
+      },
       getWidth: 1,
       widthUnits: 'pixels',
-      updateTriggers: { getColor: hoveredAirportId },
+      updateTriggers: { getColor: [hoveredAirportId, viewMode] },
     }),
     new IconLayer({
       id: 'aircraft',
@@ -80,8 +93,12 @@ export default function FlightMap() {
       getIcon: () => ({ url: '/plane.svg', width: 64, height: 64, mask: true }),
       getSize: 16,
       getAngle: f => -f.heading,
-      getColor: [255, 140, 0, 255],
-      updateTriggers: { getColor: hoveredAirportId },
+      getColor: f => {
+        const match = viewMode === 'outgoing' ? f.origin : f.destination
+        if (match !== hoveredAirportId) return [0, 0, 0, 0]
+        return viewMode === 'outgoing' ? [145, 67, 232, 200] : [81, 201, 45, 255]
+      },
+      updateTriggers: { getColor: [hoveredAirportId, viewMode] },
     }),
     new PathLayer({
       id: 'routes',

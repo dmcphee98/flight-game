@@ -18,6 +18,10 @@ export interface RouteEmitter {
   duration: number
   /** Departure-time offset in seconds, in [0, interval). */
   phase: number
+  /** ICAO code of the departure airport. */
+  origin: string
+  /** ICAO code of the arrival airport. */
+  destination: string
 }
 
 /** A single airborne flight at a specific simulation instant. */
@@ -26,6 +30,10 @@ export interface ActiveFlight {
   position: [number, number]
   /** True bearing in degrees (0 = north, clockwise). */
   heading: number
+  /** ICAO code of the departure airport. */
+  origin: string
+  /** ICAO code of the arrival airport. */
+  destination: string
 }
 
 /**
@@ -56,7 +64,7 @@ export function buildEmitters(
     const duration = (route.duration ?? route.distance / 800 * 60) * 60
     const phase = hashPhase(`${route.origin}:${route.destination}`, interval)
 
-    emitters.push({ path, interval, duration, phase })
+    emitters.push({ path, interval, duration, phase, origin: route.origin, destination: route.destination })
   }
 
   return emitters
@@ -107,7 +115,7 @@ export function getActiveFlights(
           p0[0] + (p1[0] - p0[0]) * frac,
           p0[1] + (p1[1] - p0[1]) * frac,
         ]
-        activeFlights.push({ position, heading: bearingDeg(p0, p1) })
+        activeFlights.push({ position, heading: bearingDeg(p0, p1), origin: e.origin, destination: e.destination })
         emitterActive = true
       }
     }
