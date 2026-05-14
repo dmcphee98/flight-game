@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import DeckGL from '@deck.gl/react'
 import { IconLayer, PathLayer, TextLayer } from '@deck.gl/layers'
 import { Map as MapGL } from 'react-map-gl/maplibre'
@@ -10,6 +10,8 @@ import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airpor
 import {buildEmitters, getActiveFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import SimulationControls from "./SimulationControls.tsx";
+
+const LABEL_ZOOM_THRESHOLD = 4.5
 
 const INITIAL_VIEW_STATE = {
   longitude: 5,
@@ -34,7 +36,11 @@ export default function FlightMap() {
   const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(new Set())
   const [emitters, setEmitters] = useState<RouteEmitter[]>([])
   const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
+  const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
+
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
+
+  const zoomRef = useRef(INITIAL_VIEW_STATE.zoom)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -133,7 +139,10 @@ export default function FlightMap() {
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getIcon: () => ({ url: '/dot.png', width: 128, height: 128, mask: true }),
-      getSize: d => d.icao === hoveredAirportId ? 32 : 24,
+      getSize: d => d.icao === hoveredAirportId ? 120000 : 100000,
+      sizeUnits: 'meters',
+      sizeMinPixels: 8,
+      sizeMaxPixels: 28,
       getAngle: d => airportMeta.get(d.icao)?.iconRotation ?? 0,
       getColor: d => selectedAirportIds.has(d.icao) ? AIRPORT_ICON_COLORS.GREEN : AIRPORT_ICON_COLORS.BLACK,
       pickable: true,
@@ -163,12 +172,16 @@ export default function FlightMap() {
     }),
     new TextLayer<Airport>({
       id: 'airports-label',
+      visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getText: d => d.iata,
-      getSize: d => d.icao === hoveredAirportId ? 26 : 22,
+      getSize: d => d.icao === hoveredAirportId ? 50000 : 40000,
+      sizeUnits: 'meters',
+      sizeMinPixels: 0,
+      sizeMaxPixels: 26,
       getColor: d => selectedAirportIds.has(d.icao) ? AIRPORT_LABEL_COLORS.GREEN : AIRPORT_LABEL_COLORS.BLACK,
-      getPixelOffset: d => d.icao === hoveredAirportId ? [0, -30] : [0, -26],
+      getPixelOffset: [0, -26],
       fontFamily: 'Caveat Brush',
       fontWeight: 'normal',
       onHover: (info) => {
@@ -176,12 +189,10 @@ export default function FlightMap() {
       },
       updateTriggers: {
         getSize: hoveredAirportId,
-        getPixelOffset: hoveredAirportId,
         getColor: [...selectedAirportIds].sort().join(','),
       },
       transitions: {
         getSize: { duration: 150, easing: easeCubic },
-        getPixelOffset: { duration: 150, easing: easeCubic },
         getColor: { duration: 200, easing: easeCubic },
       }
     }),
@@ -200,6 +211,14 @@ export default function FlightMap() {
 
       <DeckGL
           initialViewState={INITIAL_VIEW_STATE}
+          onViewStateChange={({ viewState }) => {
+            // Toggles label visibility when the zoom level crosses LABEL_ZOOM_THRESHOLD
+            const currentZoom = (viewState as { zoom: number }).zoom
+            const previousZoom = zoomRef.current
+            const crossed = (currentZoom > LABEL_ZOOM_THRESHOLD) !== (previousZoom > LABEL_ZOOM_THRESHOLD)
+            zoomRef.current = currentZoom
+            if (crossed) setLabelsVisible(currentZoom > LABEL_ZOOM_THRESHOLD)
+          }}
           getCursor={({ isHovering }) => isHovering ? 'pointer' : 'grab'}
           controller={true}
           layers={layers}
