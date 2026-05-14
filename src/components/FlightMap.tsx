@@ -29,10 +29,15 @@ export default function FlightMap() {
   const [emitters, setEmitters] = useState<RouteEmitter[]>([])
   const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
+  const [fontReady, setFontReady] = useState(false)
 
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
 
   const zoomRef = useRef(INITIAL_VIEW_STATE.zoom)
+
+  useEffect(() => {
+    document.fonts.load('bold 18px "Courier Prime"').then(() => setFontReady(true))
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -206,7 +211,7 @@ export default function FlightMap() {
           : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.8),
       getPixelOffset: [28, 1],
       getTextAnchor: 'start',
-      fontFamily: 'Courier Prime',
+      fontFamily: fontReady ? 'Courier Prime' : 'monospace',
       fontWeight: 'bold',
       updateTriggers: {
         getColor: selectedAirportIds.size,
@@ -223,7 +228,7 @@ export default function FlightMap() {
       getColor: [230, 230, 230, 255],
       getPixelOffset: [103, 1],
       getTextAnchor: 'end',
-      fontFamily: 'Courier Prime',
+      fontFamily: fontReady ? 'Courier Prime' : 'monospace',
       fontWeight: 'bold',
     }),
   ]
