@@ -126,6 +126,29 @@ export function getActiveFlights(
   return { activeFlights, activeEmitters }
 }
 
+/**
+ * Returns flights that arrived (completed) in the half-open interval (prevSimTime, simTime].
+ *
+ * Call once per animation frame from a useEffect
+ */
+export function getCompletedFlights(
+  emitters: RouteEmitter[],
+  prevSimTime: number,
+  simTime: number,
+): { origin: string; destination: string }[] {
+  const completed: { origin: string; destination: string }[] = []
+  for (const e of emitters) {
+    // Flight n arrives at: e.phase + n * e.interval + e.duration
+    // We want arrivals in (prevSimTime, simTime]
+    const nMin = Math.floor((prevSimTime - e.phase - e.duration) / e.interval) + 1
+    const nMax = Math.floor((simTime - e.phase - e.duration) / e.interval)
+    for (let n = Math.max(0, nMin); n <= nMax; n++) {
+      completed.push({ origin: e.origin, destination: e.destination })
+    }
+  }
+  return completed
+}
+
 function bearingDeg(from: [number, number], to: [number, number]): number {
   const toRad = Math.PI / 180
   const lon1 = from[0] * toRad, lat1 = from[1] * toRad

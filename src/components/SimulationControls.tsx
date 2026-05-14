@@ -16,9 +16,10 @@ interface Props {
   play: () => void
   pause: () => void
   setSpeed: (s: PlaybackSpeed) => void
+  money: number
 }
 
-export default function SimulationControls({ simTime, playing, speed, play, pause, setSpeed }: Props) {
+export default function SimulationControls({ simTime, playing, speed, play, pause, setSpeed, money }: Props) {
   return (
     <div style={{
       position: 'absolute',
@@ -44,6 +45,8 @@ export default function SimulationControls({ simTime, playing, speed, play, paus
       </button>
 
       <span style={{ minWidth: 110, color: '#333' }}>{formatSimTime(simTime)}</span>
+
+      <span style={{ color: '#2a7a2a', fontWeight: 'bold', minWidth: 60 }}>${money.toLocaleString()}</span>
 
       <div style={{ display: 'flex', gap: 4 }}>
         {SPEEDS.map(s => (

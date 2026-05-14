@@ -19,7 +19,7 @@ export type PlaybackSpeed = 60 | 300 | 600 | 1800 | 3600
 export function useSimulationClock() {
   const [simTime, setSimTime] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState<PlaybackSpeed>(300)
+  const [speed, setSpeed] = useState<PlaybackSpeed>(600)
 
   const lastWallTime = useRef<number>(0)
   const simTimeRef = useRef<number>(0)

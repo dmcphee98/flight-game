@@ -7,7 +7,7 @@ import { MAP_STYLES } from '../../constants/mapStyles.ts'
 import { buildGameData } from '../utils/buildGameData.ts'
 import { easeCubic } from '../utils/easings'
 import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airportLookup.ts'
-import {buildEmitters, getActiveFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
+import {buildEmitters, getActiveFlights, getCompletedFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import SimulationControls from "./SimulationControls.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
@@ -31,10 +31,12 @@ export default function FlightMap() {
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
   const [fontReady, setFontReady] = useState(false)
   const [prices, setPrices] = useState<Map<string, number>>(new Map())
+  const [money, setMoney] = useState(10)
 
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
 
   const zoomRef = useRef(INITIAL_VIEW_STATE.zoom)
+  const prevSimTimeRef = useRef<number | null>(null)
 
   useEffect(() => {
     document.fonts.load('bold 18px "Courier Prime"').then(() => setFontReady(true))
@@ -47,6 +49,16 @@ export default function FlightMap() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    const prev = prevSimTimeRef.current
+    prevSimTimeRef.current = simTime
+    if (prev === null) return
+    const earned = getCompletedFlights(emitters, prev, simTime).filter(
+      f => selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)
+    ).length
+    if (earned > 0) setMoney(m => m + earned)
+  }, [simTime, emitters, selectedAirportIds])
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
@@ -244,6 +256,7 @@ export default function FlightMap() {
           play={play}
           pause={pause}
           setSpeed={setSpeed}
+          money={money}
       />
 
       <DeckGL
