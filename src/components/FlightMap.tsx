@@ -30,6 +30,7 @@ export default function FlightMap() {
   const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
   const [fontReady, setFontReady] = useState(false)
+  const [prices, setPrices] = useState<Map<string, number>>(new Map())
 
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
 
@@ -49,10 +50,11 @@ export default function FlightMap() {
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
-      ([lookup, { icaoCodes, routes }]) => {
+      ([lookup, { icaoCodes, routes, prices }]) => {
         setAirports(icaoCodes.flatMap(icao => lookup.get(icao) ?? []))
         setAirportMeta(new Map(icaoCodes.map(icao => [icao, { iconRotation: airportRotation(icao) }])))
         setEmitters(buildEmitters(routes, lookup))
+        setPrices(prices)
       },
     )
   }, [])
@@ -222,7 +224,7 @@ export default function FlightMap() {
       visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getText: () => `c99`,
+      getText: d => `c${(prices.get(d.icao) ?? 0).toString().padStart(2, '0')}`,
       getSize: 18,
       sizeUnits: 'pixels',
       getColor: [230, 230, 230, 255],

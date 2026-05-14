@@ -22,6 +22,8 @@ export interface Route {
 export interface GameData {
   icaoCodes: string[]
   routes: Route[]
+  /** Integer price per airport, derived from total inbound + outbound flight frequencies in this subgraph. */
+  prices: Map<string, number>
 }
 
 /**
@@ -36,12 +38,16 @@ export interface GameData {
  * @param minFreq - Minimum route frequency to consider an edge traversable.
  * @param minLatSep - Minimum latitude separation in degrees between any two selected airports.
  * @param minLonSep - Minimum longitude separation in degrees between any two selected airports.
- */
+ * @param priceScaling - Controls the relationship between an airport's traffic and its purchase price.
+ *    `-1` = sublinear (expensive airports underpriced relative to income),
+ *    `0` = linear (price proportional to income),
+ *    `+1` = superlinear (expensive airports overpriced relative to income). */
 export async function buildGameData(
   count = 100,
   minFreq = 1,
   minLatSep = 2,
   minLonSep = 4,
+  priceScaling = 1,
 ): Promise<GameData> {
   const [rawGraph, airportsData] = await Promise.all([
     fetch('/data/route_graph.json').then(r => r.json()) as Promise<AirportGraph>,
@@ -105,18 +111,33 @@ export async function buildGameData(
   }
 
   const routes: Route[] = []
+  const priceAccum = new Map<string, number>()
   for (const [origin, destinations] of graph) {
     if (!selected.has(origin)) continue
     for (const [dest, edge] of destinations) {
-      if (selected.has(dest)) routes.push({
+      if (!selected.has(dest)) continue
+      routes.push({
         origin: origin,
         destination: dest,
         frequency: edge.f,
         distance: edge.d,
         duration: edge.t
       })
+      priceAccum.set(origin, (priceAccum.get(origin) ?? 0) + edge.f)
+      priceAccum.set(dest, (priceAccum.get(dest) ?? 0) + edge.f)
     }
   }
 
-  return { icaoCodes: [...selected], routes }
+  const totals = [...priceAccum.values()]
+  const min = Math.min(...totals)
+  const max = Math.max(...totals)
+  const range = max - min
+  const exponent = priceScaling >= 0 ? 1 + priceScaling : 1 / (1 - priceScaling)
+  const prices = new Map<string, number>(
+      [...priceAccum].map(([icao, total]) => [
+        icao,
+        range === 0 ? 50 : 1 + Math.round(Math.pow((total - min) / range, exponent) * 98),
+      ]),
+  )
+  return { icaoCodes: [...selected], routes, prices }
 }
