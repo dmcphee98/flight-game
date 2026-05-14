@@ -10,6 +10,7 @@ import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airpor
 import {buildEmitters, getActiveFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import SimulationControls from "./SimulationControls.tsx";
+import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
@@ -19,18 +20,6 @@ const INITIAL_VIEW_STATE = {
   zoom: 2,
 }
 
-const STATE_COLORS = {
-  DEFAULT: [0, 0, 0],
-  HOVERED: [80, 100, 140],
-  SELECTED: [160, 35, 45],
-} as const;
-
-const TRANSPARENT: [number, number, number, number] = [0, 0, 0, 0];
-
-const withAlpha = (
-    rgb: readonly [number, number, number],
-    alpha: number,
-): [number, number, number, number] => [rgb[0], rgb[1], rgb[2], alpha];
 
 export default function FlightMap() {
   const [airports, setAirports] = useState<Airport[]>([])
@@ -108,7 +97,7 @@ export default function FlightMap() {
       getPath: e => e.path,
       getColor: e => {
         const match = viewMode === 'outgoing' ? e.origin : e.destination
-        if (match === hoveredAirportId) return withAlpha(STATE_COLORS.HOVERED, 70)
+        if (match === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.4)
         return TRANSPARENT
       },
       getWidth: 1,
@@ -127,8 +116,8 @@ export default function FlightMap() {
       getAngle: f => -f.heading,
       getColor: f => {
         const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
-        if (selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)) return withAlpha(STATE_COLORS.SELECTED, 200)
-        if (hoverMatch === hoveredAirportId) return withAlpha(STATE_COLORS.HOVERED, 200)
+        if (selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.6)
+        if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.6)
         return TRANSPARENT
       },
     }),
@@ -136,7 +125,7 @@ export default function FlightMap() {
       id: 'routes',
       data: routePaths,
       getPath: d => d,
-      getColor: withAlpha(STATE_COLORS.SELECTED, 135),
+      getColor: withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.4),
       getWidth: 3,
       widthUnits: 'pixels',
     }),
@@ -148,11 +137,11 @@ export default function FlightMap() {
       getSize: d => d.icao === hoveredAirportId ? 120000 : 100000,
       sizeUnits: 'meters',
       sizeMinPixels: 8,
-      sizeMaxPixels: 28,
+      sizeMaxPixels: 20,
       getAngle: d => airportMeta.get(d.icao)?.iconRotation ?? 0,
       getColor: d => selectedAirportIds.has(d.icao)
-          ? withAlpha(STATE_COLORS.SELECTED, 255)
-          : withAlpha(STATE_COLORS.DEFAULT, 215),
+          ? withAlpha(MAP_COLORS.SELECTED_SECONDARY, 1)
+          : withAlpha(MAP_COLORS.DEFAULT_SECONDARY, 1),
       pickable: true,
       onClick: (info) => {
         if (info.object) {
@@ -171,40 +160,71 @@ export default function FlightMap() {
       },
       updateTriggers: {
         getSize: hoveredAirportId,
-        getColor: [...selectedAirportIds].sort().join(','),
+        getColor: selectedAirportIds.size,
       },
       transitions: {
         getSize: { duration: 150, easing: easeCubic },
-        getColor: { duration: 200, easing: easeCubic },
       }
     }),
+    new IconLayer<Airport>({
+      id: 'airport-tag-background-icon',
+      visible: labelsVisible,
+      data: airports,
+      getPosition: d => [d.lon, d.lat],
+      getIcon: () => ({ url: '/airport-tag-background.png', width: 353, height: 80, mask: true }),
+      getSize: 23,
+      getColor: [255, 255, 255, 200],
+      sizeUnits: 'pixels',
+      getPixelOffset: [60, 0],
+    }),
+    new IconLayer<Airport>({
+      id: 'airports-tag-icon',
+      visible: labelsVisible,
+      data: airports,
+      getPosition: d => [d.lon, d.lat],
+      getIcon: () => ({ url: '/airport-tag.png', width: 353, height: 80, mask: true }),
+      getColor: d => selectedAirportIds.has(d.icao)
+          ? withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.7)
+          : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.7),
+      getSize: 23,
+      sizeUnits: 'pixels',
+      getPixelOffset: [60, 0],
+      updateTriggers: {
+        getColor: selectedAirportIds.size,
+      },
+    }),
     new TextLayer<Airport>({
-      id: 'airports-label',
+      id: 'airports-tag-iata',
       visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getText: d => d.iata,
-      getSize: d => d.icao === hoveredAirportId ? 50000 : 40000,
-      sizeUnits: 'meters',
-      sizeMinPixels: 0,
-      sizeMaxPixels: 26,
+      getSize: 18,
+      sizeUnits: 'pixels',
       getColor: d => selectedAirportIds.has(d.icao)
-          ? withAlpha(STATE_COLORS.SELECTED, 235)
-          : withAlpha(STATE_COLORS.DEFAULT, 215),
-      getPixelOffset: [0, -26],
-      fontFamily: 'Caveat Brush',
-      fontWeight: 'normal',
-      onHover: (info) => {
-        setHoveredAirportId(info.object ? info.object.icao : null);
-      },
+          ? withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
+          : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.8),
+      getPixelOffset: [28, 1],
+      getTextAnchor: 'start',
+      fontFamily: 'Courier Prime',
+      fontWeight: 'bold',
       updateTriggers: {
-        getSize: hoveredAirportId,
-        getColor: [...selectedAirportIds].sort().join(','),
+        getColor: selectedAirportIds.size,
       },
-      transitions: {
-        getSize: { duration: 150, easing: easeCubic },
-        getColor: { duration: 200, easing: easeCubic },
-      }
+    }),
+    new TextLayer<Airport>({
+      id: 'airports-tag-price',
+      visible: labelsVisible,
+      data: airports,
+      getPosition: d => [d.lon, d.lat],
+      getText: () => `c99`,
+      getSize: 18,
+      sizeUnits: 'pixels',
+      getColor: [230, 230, 230, 255],
+      getPixelOffset: [103, 1],
+      getTextAnchor: 'end',
+      fontFamily: 'Courier Prime',
+      fontWeight: 'bold',
     }),
   ]
 
