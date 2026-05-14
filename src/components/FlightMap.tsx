@@ -19,15 +19,18 @@ const INITIAL_VIEW_STATE = {
   zoom: 2,
 }
 
-const AIRPORT_ICON_COLORS = {
-  BLACK: [0, 0, 0, 215],
-  GREEN: [39, 114, 29, 235],
+const STATE_COLORS = {
+  DEFAULT: [0, 0, 0],
+  HOVERED: [80, 100, 140],
+  SELECTED: [160, 35, 45],
 } as const;
 
-const AIRPORT_LABEL_COLORS = {
-  BLACK: [0, 0, 0, 215],
-  GREEN: [39, 114, 29, 235],
-} as const;
+const TRANSPARENT: [number, number, number, number] = [0, 0, 0, 0];
+
+const withAlpha = (
+    rgb: readonly [number, number, number],
+    alpha: number,
+): [number, number, number, number] => [rgb[0], rgb[1], rgb[2], alpha];
 
 export default function FlightMap() {
   const [airports, setAirports] = useState<Airport[]>([])
@@ -105,12 +108,15 @@ export default function FlightMap() {
       getPath: e => e.path,
       getColor: e => {
         const match = viewMode === 'outgoing' ? e.origin : e.destination
-        if (match !== hoveredAirportId) return [0, 0, 0, 0]
-        return viewMode === 'outgoing' ? [145, 67, 232, 140] : [81, 201, 45, 160]
+        if (match === hoveredAirportId) return withAlpha(STATE_COLORS.HOVERED, 70)
+        return TRANSPARENT
       },
       getWidth: 1,
       widthUnits: 'pixels',
       updateTriggers: { getColor: [hoveredAirportId, viewMode] },
+      transitions: {
+        getColor: { duration: 50, easing: easeCubic },
+      }
     }),
     new IconLayer({
       id: 'aircraft',
@@ -120,18 +126,18 @@ export default function FlightMap() {
       getSize: 16,
       getAngle: f => -f.heading,
       getColor: f => {
-        const match = viewMode === 'outgoing' ? f.origin : f.destination
-        if (match !== hoveredAirportId) return [0, 0, 0, 0]
-        return viewMode === 'outgoing' ? [145, 67, 232, 200] : [81, 201, 45, 255]
+        const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
+        if (selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)) return withAlpha(STATE_COLORS.SELECTED, 200)
+        if (hoverMatch === hoveredAirportId) return withAlpha(STATE_COLORS.HOVERED, 200)
+        return TRANSPARENT
       },
-      updateTriggers: { getColor: [hoveredAirportId, viewMode] },
     }),
     new PathLayer({
       id: 'routes',
       data: routePaths,
       getPath: d => d,
-      getColor: [39, 114, 29, 135],
-      getWidth: 4,
+      getColor: withAlpha(STATE_COLORS.SELECTED, 135),
+      getWidth: 3,
       widthUnits: 'pixels',
     }),
     new IconLayer<Airport>({
@@ -144,7 +150,9 @@ export default function FlightMap() {
       sizeMinPixels: 8,
       sizeMaxPixels: 28,
       getAngle: d => airportMeta.get(d.icao)?.iconRotation ?? 0,
-      getColor: d => selectedAirportIds.has(d.icao) ? AIRPORT_ICON_COLORS.GREEN : AIRPORT_ICON_COLORS.BLACK,
+      getColor: d => selectedAirportIds.has(d.icao)
+          ? withAlpha(STATE_COLORS.SELECTED, 255)
+          : withAlpha(STATE_COLORS.DEFAULT, 215),
       pickable: true,
       onClick: (info) => {
         if (info.object) {
@@ -180,7 +188,9 @@ export default function FlightMap() {
       sizeUnits: 'meters',
       sizeMinPixels: 0,
       sizeMaxPixels: 26,
-      getColor: d => selectedAirportIds.has(d.icao) ? AIRPORT_LABEL_COLORS.GREEN : AIRPORT_LABEL_COLORS.BLACK,
+      getColor: d => selectedAirportIds.has(d.icao)
+          ? withAlpha(STATE_COLORS.SELECTED, 235)
+          : withAlpha(STATE_COLORS.DEFAULT, 215),
       getPixelOffset: [0, -26],
       fontFamily: 'Caveat Brush',
       fontWeight: 'normal',
