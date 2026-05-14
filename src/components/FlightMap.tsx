@@ -6,7 +6,6 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { MAP_STYLES } from '../../constants/mapStyles.ts'
 import { buildGameData } from '../utils/buildGameData.ts'
 import { easeCubic } from '../utils/easings'
-import { buildPath } from '../utils/greatCirclePath.ts'
 import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airportLookup.ts'
 import {buildEmitters, getActiveFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
@@ -60,17 +59,38 @@ export default function FlightMap() {
       [emitters, simTime],
   )
 
+  /**
+   * Sorted `"ICAO-ICAO"` key → great-circle path for that route.
+   * Built once when emitters arrive for O(1) lookup.
+   */
+  const routePathByKey = useMemo(() => {
+    const map = new Map<string, [number, number][]>()
+    for (const e of emitters) {
+      const key = e.origin < e.destination
+          ? `${e.origin}-${e.destination}`
+          : `${e.destination}-${e.origin}`
+      if (!map.has(key)) map.set(key, e.path)
+    }
+    return map
+  }, [emitters])
+
+  /**
+   * Great-circle paths between every pair of currently selected airports that
+   * has a route between them. Rendered as solid lines on top of the map.
+   */
   const routePaths = useMemo(() => {
-    const selected = airports.filter(a => selectedAirportIds.has(a.icao))
+    const selected = [...selectedAirportIds]
     const paths: [number, number][][] = []
     for (let i = 0; i < selected.length; i++) {
       for (let j = i + 1; j < selected.length; j++) {
-        const result = buildPath(selected[i].lon, selected[i].lat, selected[j].lon, selected[j].lat)
-        if (result) paths.push(result.line.geometry.coordinates as [number, number][])
+        const a = selected[i], b = selected[j]
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`
+        const path = routePathByKey.get(key)
+        if (path) paths.push(path)
       }
     }
     return paths
-  }, [airports, selectedAirportIds])
+  }, [selectedAirportIds, routePathByKey])
 
   const layers = [
     new PathLayer({
