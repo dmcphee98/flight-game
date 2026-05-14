@@ -20,12 +20,11 @@ const INITIAL_VIEW_STATE = {
   zoom: 2,
 }
 
-
 export default function FlightMap() {
   const [airports, setAirports] = useState<Airport[]>([])
   const [airportMeta, setAirportMeta] = useState<Map<string, AirportMeta>>(new Map())
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
-  const [selectedAirportIds, setSelectedAirportIds] = useState<Set<string>>(new Set())
+  const [purchasedAirportIds, setPurchasedAirportIds] = useState<Set<string>>(new Set())
   const [emitters, setEmitters] = useState<RouteEmitter[]>([])
   const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
@@ -55,10 +54,10 @@ export default function FlightMap() {
     prevSimTimeRef.current = simTime
     if (prev === null) return
     const earned = getCompletedFlights(emitters, prev, simTime).filter(
-      f => selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)
+      f => purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)
     ).length
     if (earned > 0) setMoney(m => m + earned)
-  }, [simTime, emitters, selectedAirportIds])
+  }, [simTime, emitters, purchasedAirportIds])
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
@@ -96,7 +95,7 @@ export default function FlightMap() {
    * has a route between them. Rendered as solid lines on top of the map.
    */
   const routePaths = useMemo(() => {
-    const selected = [...selectedAirportIds]
+    const selected = [...purchasedAirportIds]
     const paths: [number, number][][] = []
     for (let i = 0; i < selected.length; i++) {
       for (let j = i + 1; j < selected.length; j++) {
@@ -107,7 +106,7 @@ export default function FlightMap() {
       }
     }
     return paths
-  }, [selectedAirportIds, routePathByKey])
+  }, [purchasedAirportIds, routePathByKey])
 
   const layers = [
     new PathLayer({
@@ -135,7 +134,7 @@ export default function FlightMap() {
       getAngle: f => -f.heading,
       getColor: f => {
         const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
-        if (selectedAirportIds.has(f.origin) && selectedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.6)
+        if (purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.6)
         if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.6)
         return TRANSPARENT
       },
@@ -158,28 +157,25 @@ export default function FlightMap() {
       sizeMinPixels: 8,
       sizeMaxPixels: 20,
       getAngle: d => airportMeta.get(d.icao)?.iconRotation ?? 0,
-      getColor: d => selectedAirportIds.has(d.icao)
+      getColor: d => purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_SECONDARY, 1)
           : withAlpha(MAP_COLORS.DEFAULT_SECONDARY, 1),
       pickable: true,
       onClick: (info) => {
-        if (info.object) {
-          setSelectedAirportIds(prev => {
-            const next = new Set(prev)
-            const id = info.object.icao
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            console.log(next)
-            return next
-          })
-        }
+        if (!info.object) return
+        const id = info.object.icao
+        if (purchasedAirportIds.has(id)) return
+        const price = prices.get(id) ?? 0
+        if (money < price) return
+        setPurchasedAirportIds(prev => new Set(prev).add(id))
+        setMoney(m => m - price)
       },
       onHover: (info) => {
         setHoveredAirportId(info.object ? info.object.icao : null);
       },
       updateTriggers: {
         getSize: hoveredAirportId,
-        getColor: selectedAirportIds.size,
+        getColor: purchasedAirportIds.size,
       },
       transitions: {
         getSize: { duration: 150, easing: easeCubic },
@@ -202,14 +198,14 @@ export default function FlightMap() {
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getIcon: () => ({ url: '/airport-tag.png', width: 353, height: 80, mask: true }),
-      getColor: d => selectedAirportIds.has(d.icao)
+      getColor: d => purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.7)
           : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.7),
       getSize: 23,
       sizeUnits: 'pixels',
       getPixelOffset: [60, 0],
       updateTriggers: {
-        getColor: selectedAirportIds.size,
+        getColor: purchasedAirportIds.size,
       },
     }),
     new TextLayer<Airport>({
@@ -220,7 +216,7 @@ export default function FlightMap() {
       getText: d => d.iata,
       getSize: 18,
       sizeUnits: 'pixels',
-      getColor: d => selectedAirportIds.has(d.icao)
+      getColor: d => purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
           : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.8),
       getPixelOffset: [28, 1],
@@ -228,7 +224,7 @@ export default function FlightMap() {
       fontFamily: fontReady ? 'Courier Prime' : 'monospace',
       fontWeight: 'bold',
       updateTriggers: {
-        getColor: selectedAirportIds.size,
+        getColor: purchasedAirportIds.size,
       },
     }),
     new TextLayer<Airport>({
@@ -236,10 +232,10 @@ export default function FlightMap() {
       visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getText: d => `c${(prices.get(d.icao) ?? 0).toString().padStart(2, '0')}`,
+      getText: d => `\u00A2${(prices.get(d.icao) ?? 0).toString().padStart(2, '0')}`,
       getSize: 18,
       sizeUnits: 'pixels',
-      getColor: [230, 230, 230, 255],
+      getColor: [240, 240, 240, 255],
       getPixelOffset: [103, 1],
       getTextAnchor: 'end',
       fontFamily: fontReady ? 'Courier Prime' : 'monospace',
