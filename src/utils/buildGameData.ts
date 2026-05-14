@@ -27,10 +27,46 @@ export interface GameData {
 /**
  * Fetches the route graph, picks a random seed airport, then greedily expands
  * by adding the highest-frequency unvisited neighbor until `count` airports
- * are selected. Returns selected ICAO codes and all routes between them.
+ * are selected, skipping any candidate that falls within the elliptical exclusion
+ * zone of an already-selected airport.
+ *
+ * Returns selected ICAO codes and all routes between them.
+ *
+ * @param count - Number of airports to select.
+ * @param minFreq - Minimum route frequency to consider an edge traversable.
+ * @param minLatSep - Minimum latitude separation in degrees between any two selected airports.
+ * @param minLonSep - Minimum longitude separation in degrees between any two selected airports.
  */
-export async function buildGameData(count = 50, minFreq = 1): Promise<GameData> {
-  const rawGraph: AirportGraph = await fetch('/data/route_graph.json').then(r => r.json())
+export async function buildGameData(
+  count = 100,
+  minFreq = 1,
+  minLatSep = 2,
+  minLonSep = 4,
+): Promise<GameData> {
+  const [rawGraph, airportsData] = await Promise.all([
+    fetch('/data/route_graph.json').then(r => r.json()) as Promise<AirportGraph>,
+    fetch('/data/airports.json').then(r => r.json()) as Promise<{ airports: [string, string, number, number, number][] }>,
+  ])
+
+  const coords = new Map<string, { lat: number; lon: number }>()
+  for (const [icao, , lat, lon] of airportsData.airports)
+    coords.set(icao, { lat, lon })
+
+  /**
+   * Returns true if airports `a` and `b` are too close to appear together in a route.
+   *
+   * Closeness is defined by an elliptical exclusion zone. Any candidate inside the
+   * ellipse is rejected
+   *
+   * Pass 0 for either axis to disable that constraint entirely.
+   */
+  const tooClose = (a: string, b: string): boolean => {
+    const ca = coords.get(a), cb = coords.get(b)
+    if (!ca || !cb) return false
+    const dLat = minLatSep > 0 ? (ca.lat - cb.lat) / minLatSep : 0
+    const dLon = minLonSep > 0 ? (ca.lon - cb.lon) / minLonSep : 0
+    return dLat * dLat + dLon * dLon < 1
+  }
 
   const graph = new Map<string, Map<string, GraphEdge>>()
   for (const [orig, dests] of Object.entries(rawGraph)) {
@@ -45,11 +81,12 @@ export async function buildGameData(count = 50, minFreq = 1): Promise<GameData> 
   const seed = nodes[Math.floor(Math.random() * nodes.length)]
 
   const selected = new Set<string>([seed])
+  const seen = new Set<string>([seed])
   const frontier = new Map<string, number>()
 
   const expand = (icao: string) => {
     for (const [dest, edge] of graph.get(icao) ?? []) {
-      if (!selected.has(dest))
+      if (!seen.has(dest))
         frontier.set(dest, Math.max(frontier.get(dest) ?? 0, edge.f))
     }
   }
@@ -60,9 +97,11 @@ export async function buildGameData(count = 50, minFreq = 1): Promise<GameData> 
     let best = '', bestFreq = -1
     for (const [icao, freq] of frontier)
       if (freq > bestFreq) { best = icao; bestFreq = freq }
-    selected.add(best)
     frontier.delete(best)
+    seen.add(best)
     expand(best)
+    if ([...selected].some(s => tooClose(s, best))) continue
+    selected.add(best)
   }
 
   const routes: Route[] = []
