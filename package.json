@@ -12,12 +12,14 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@turf/turf": "^7.3.5",
     "react-map-gl": "^8.1.1",
     "maplibre-gl": "^5.24.0",
     "deck.gl": "^9.3.2",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.0",
