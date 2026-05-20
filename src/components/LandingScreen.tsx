@@ -3,9 +3,10 @@ import { useState } from 'react'
 interface Props {
   onCreateGame: (playerName: string) => void
   onJoinGame: (playerName: string, roomCode: string) => void
+  isConnecting: boolean
 }
 
-export default function LandingScreen({ onCreateGame, onJoinGame }: Props) {
+export default function LandingScreen({ onCreateGame, onJoinGame, isConnecting }: Props) {
   const [playerName, setPlayerName] = useState('')
   const [roomCode, setRoomCode] = useState('')
   const [roomError, setRoomError] = useState<string | null>(null)
@@ -15,12 +16,12 @@ export default function LandingScreen({ onCreateGame, onJoinGame }: Props) {
   const nameValid = trimmedName.length > 0
 
   const handleCreate = () => {
-    if (!nameValid) return
+    if (!nameValid || isConnecting) return
     onCreateGame(trimmedName)
   }
 
   const handleJoin = () => {
-    if (!nameValid || !trimmedCode) return
+    if (!nameValid || !trimmedCode || isConnecting) return
     if (trimmedCode.length < 4) {
       setRoomError('Room not found')
       return
@@ -77,9 +78,9 @@ export default function LandingScreen({ onCreateGame, onJoinGame }: Props) {
               Start a new room and share the code with friends.
             </div>
             <button
-              className={`font-courier font-bold text-sm px-5 py-2.5 rounded-md w-full tracking-wide bg-amber-900 text-white border-none transition-opacity ${!nameValid ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`font-courier font-bold text-sm px-5 py-2.5 rounded-md w-full tracking-wide bg-amber-900 text-white border-none transition-opacity ${!nameValid || isConnecting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
               onClick={handleCreate}
-              disabled={!nameValid}
+              disabled={!nameValid || isConnecting}
             >
               Create game
             </button>
@@ -116,9 +117,9 @@ export default function LandingScreen({ onCreateGame, onJoinGame }: Props) {
               )}
             </div>
             <button
-              className={`font-courier font-bold text-sm px-5 py-2.5 rounded-md w-full tracking-wide bg-transparent text-amber-900 border-2 border-amber-900 transition-opacity ${!nameValid || !trimmedCode ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`font-courier font-bold text-sm px-5 py-2.5 rounded-md w-full tracking-wide bg-transparent text-amber-900 border-2 border-amber-900 transition-opacity ${!nameValid || !trimmedCode || isConnecting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
               onClick={handleJoin}
-              disabled={!nameValid || !trimmedCode}
+              disabled={!nameValid || !trimmedCode || isConnecting}
             >
               Join game
             </button>
