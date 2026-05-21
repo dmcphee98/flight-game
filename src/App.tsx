@@ -1,5 +1,6 @@
 import LandingScreen from './components/LandingScreen'
 import FlightMap from './components/FlightMap'
+import WaitingRoom from './components/WaitingRoom'
 import { useGameServer } from './hooks/useGameServer.ts'
 import type { ConnectionStatus } from './hooks/useGameServer.ts'
 
@@ -30,8 +31,14 @@ export default function App() {
   )
 
   if (screen === 'waiting') return (
-      <div>This is the waiting room. Room code: {gameState.roomCode}</div>
+      <WaitingRoom
+          roomCode={gameState.roomCode!}
+          players={gameState.players}
+          isHost={gameState.myPlayerId === gameState.hostId}
+          onStart={() => console.log("Start game")}
+      />
   )
+
 
   return <FlightMap />
 }

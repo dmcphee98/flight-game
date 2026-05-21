@@ -45,6 +45,8 @@ type WirePlayer = { id: string; name: string; }
 type ServerMessage =
   | { type: 'room_created'; room_code: string; my_player_id: string; players: WirePlayer[] }
   | { type: 'room_joined'; room_code: string; host_id: string; my_player_id: string; players: WirePlayer[] }
+  | { type: 'player_joined'; player: WirePlayer; players: WirePlayer[] }
+  | { type: 'player_disconnected'; player_id: string; players: WirePlayer[] }
 
 // ---------- Reducer ----------
 
@@ -105,6 +107,16 @@ function applyServerMessage(state: HookState, message: ServerMessage): HookState
           roomCode: message.room_code,
           hostId: message.host_id,
           myPlayerId: message.my_player_id,
+          players: message.players.map(wireToPlayer),
+        },
+      }
+
+    case 'player_joined':
+    case 'player_disconnected':
+      return {
+        ...state,
+        gameState: {
+          ...gameState,
           players: message.players.map(wireToPlayer),
         },
       }
