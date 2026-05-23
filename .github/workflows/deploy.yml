@@ -1,0 +1,40 @@
+name: Deploy
+
+on:
+  # Deploy main branch automatically on push to main
+  push:
+    branches: [main]
+  # Allow manual deployment of arbitrary branch via GitHub UI
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        default: main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Lambda function URL for waking flight server injected as environment variable
+      - run: npm run build
+        env:
+          VITE_GAME_SERVER_WAKE_URL: ${{ secrets.VITE_GAME_SERVER_WAKE_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/deploy-pages@v4
+        id: deployment
