@@ -33,6 +33,7 @@ jobs:
       - run: npm run build
         env:
           VITE_GAME_SERVER_WAKE_URL: ${{ secrets.VITE_GAME_SERVER_WAKE_URL }}
+          VITE_GAME_SERVER_WS_URL: ${{ secrets.VITE_GAME_SERVER_WS_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

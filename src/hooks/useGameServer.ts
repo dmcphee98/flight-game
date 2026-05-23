@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws'
+const WS_URL = import.meta.env.VITE_GAME_SERVER_WS_URL ?? 'ws://localhost:8080/ws'
 
 // ---------- Public types ----------
 
