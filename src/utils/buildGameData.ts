@@ -1,3 +1,5 @@
+import {asset} from "./asset.ts";
+
 type GraphEdge = { f: number; d: number; t?: number }
 type AirportGraph = Record<string, Record<string, GraphEdge>>
 
@@ -50,8 +52,8 @@ export async function buildGameData(
   priceScaling = 1,
 ): Promise<GameData> {
   const [rawGraph, airportsData] = await Promise.all([
-    fetch('/data/route_graph.json').then(r => r.json()) as Promise<AirportGraph>,
-    fetch('/data/airports.json').then(r => r.json()) as Promise<{ airports: [string, string, number, number, number][] }>,
+    fetch(asset('data/route_graph.json')).then(r => r.json()) as Promise<AirportGraph>,
+    fetch(asset('data/airports.json')).then(r => r.json()) as Promise<{ airports: [string, string, number, number, number][] }>,
   ])
 
   const coords = new Map<string, { lat: number; lon: number }>()
