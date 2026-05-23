@@ -11,6 +11,7 @@ import {buildEmitters, getActiveFlights, getCompletedFlights, type RouteEmitter}
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import SimulationControls from "./SimulationControls.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
+import {asset} from "../utils/asset.ts";
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
@@ -129,7 +130,9 @@ export default function FlightMap() {
       id: 'aircraft',
       data: activeFlights,
       getPosition: f => f.position,
-      getIcon: () => ({ url: '/plane.svg', width: 64, height: 64, mask: true }),
+      getIcon: () => ({
+        url: asset('plane.svg'), width: 64, height: 64, mask: true
+      }),
       getSize: 16,
       getAngle: f => -f.heading,
       getColor: f => {
@@ -151,7 +154,9 @@ export default function FlightMap() {
       id: 'airports-icon',
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getIcon: () => ({ url: '/dot.png', width: 128, height: 128, mask: true }),
+      getIcon: () => ({
+        url: asset('dot.png'), width: 128, height: 128, mask: true
+      }),
       getSize: d => d.icao === hoveredAirportId ? 120000 : 100000,
       sizeUnits: 'meters',
       sizeMinPixels: 8,
@@ -186,7 +191,9 @@ export default function FlightMap() {
       visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getIcon: () => ({ url: '/airport-tag-background.png', width: 353, height: 80, mask: true }),
+      getIcon: () => ({
+        url: asset('airport-tag-background.png'), width: 353, height: 80, mask: true
+      }),
       getSize: 23,
       getColor: [255, 255, 255, 200],
       sizeUnits: 'pixels',
@@ -197,7 +204,9 @@ export default function FlightMap() {
       visible: labelsVisible,
       data: airports,
       getPosition: d => [d.lon, d.lat],
-      getIcon: () => ({ url: '/airport-tag.png', width: 353, height: 80, mask: true }),
+      getIcon: () => ({
+        url: asset('airport-tag.png'), width: 353, height: 80, mask: true
+      }),
       getColor: d => purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.7)
           : withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.7),

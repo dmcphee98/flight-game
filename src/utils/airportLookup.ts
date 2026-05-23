@@ -1,3 +1,5 @@
+import {asset} from "./asset.ts";
+
 const AIRPORT_TYPES = [
   'large_airport',
   'medium_airport',
@@ -34,7 +36,7 @@ interface AirportsJson {
  * present) so callers can resolve either identifier to coordinates and airport type.
  */
 export async function loadAirportLookup(): Promise<Map<string, Airport>> {
-  const data: AirportsJson = await fetch('/data/airports.json').then(r => r.json())
+  const data: AirportsJson = await fetch(asset('data/airports.json')).then(r => r.json())
   const s = data.schema
   const iIcao = s.indexOf('icao')
   const iIata = s.indexOf('iata')
