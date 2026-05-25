@@ -10,6 +10,7 @@ import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airpor
 import {buildEmitters, getActiveFlights, getCompletedFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import GameHud from "./GameHud.tsx";
+import MapAttribution from "./MapAttribution.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
 import {asset} from "../utils/asset.ts";
 
@@ -37,7 +38,7 @@ export default function FlightMap({ startsAtMs }: Props) {
   const [prices, setPrices] = useState<Map<string, number>>(new Map())
   const [money, setMoney] = useState(10)
 
-  const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
+  const { simTime, play } = useSimulationClock()
 
   useEffect(() => {
     if (startsAtMs === null) return
@@ -282,8 +283,13 @@ export default function FlightMap({ startsAtMs }: Props) {
           controller={true}
           layers={layers}
       >
-        <MapGL mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}/>
+        <MapGL
+            mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}
+            attributionControl={false}
+        />
       </DeckGL>
+
+      <MapAttribution />
     </div>
   )
 }
