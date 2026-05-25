@@ -1,16 +1,20 @@
 import LandingScreen from './components/LandingScreen'
 import FlightMap from './components/FlightMap'
 import WaitingRoom from './components/WaitingRoom'
+import CountdownOverlay from './components/CountdownOverlay'
 import { useGameServer } from './hooks/useGameServer.ts'
 import type { ConnectionStatus } from './hooks/useGameServer.ts'
 
-type Screen = 'landing' | 'waiting' | 'game' | 'disconnected'
+type Screen = 'landing' | 'waiting' | 'game'
 
 function getScreenFor(status: ConnectionStatus): Screen {
   switch (status) {
     case 'room_created':
     case 'room_joined':
       return 'waiting'
+
+    case 'game_started':
+      return 'game'
 
     default:
       return 'landing'
@@ -31,14 +35,20 @@ export default function App() {
   )
 
   if (screen === 'waiting') return (
-      <WaitingRoom
-          roomCode={gameState.roomCode!}
-          players={gameState.players}
-          isHost={gameState.myPlayerId === gameState.hostId}
-          onStart={() => console.log("Start game")}
-      />
+    <WaitingRoom
+      roomCode={gameState.roomCode!}
+      players={gameState.players}
+      isHost={gameState.myPlayerId === gameState.hostId}
+      onStart={() => sendMessage({ type: 'start_game' })}
+    />
   )
 
-
-  return <FlightMap />
+  return (
+    <div className="relative w-full h-screen">
+      <FlightMap />
+      {gameState.startsAtMs !== null && (
+        <CountdownOverlay startsAtMs={gameState.startsAtMs} />
+      )}
+    </div>
+  )
 }

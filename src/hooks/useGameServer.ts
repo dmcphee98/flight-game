@@ -26,12 +26,14 @@ export interface GameState {
   hostId: string | null
   myPlayerId: string | null
   players: PlayerState[]
+  startsAtMs: number | null
 }
 
 /** Union of all messages the client can send to the server. */
 export type ClientMessage =
   | { type: 'create_room'; player_name: string }
   | { type: 'join_room'; room_code: string; player_name: string }
+  | { type: 'start_game' }
 
 // ---------- Wire types (server to client) ----------
 
@@ -47,6 +49,7 @@ type ServerMessage =
   | { type: 'room_joined'; room_code: string; host_id: string; my_player_id: string; players: WirePlayer[] }
   | { type: 'player_joined'; player: WirePlayer; players: WirePlayer[] }
   | { type: 'player_disconnected'; player_id: string; players: WirePlayer[] }
+  | { type: 'game_started'; starts_at_unix_ms: number }
 
 // ---------- Reducer ----------
 
@@ -60,6 +63,7 @@ const INITIAL_GAME_STATE: GameState = {
   hostId: null,
   myPlayerId: null,
   players: [],
+  startsAtMs: null,
 }
 
 type Action =
@@ -118,6 +122,15 @@ function applyServerMessage(state: HookState, message: ServerMessage): HookState
         gameState: {
           ...gameState,
           players: message.players.map(wireToPlayer),
+        },
+      }
+
+    case 'game_started':
+      return {
+        status: 'game_started',
+        gameState: {
+          ...gameState,
+          startsAtMs: message.starts_at_unix_ms,
         },
       }
 
