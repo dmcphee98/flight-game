@@ -45,7 +45,7 @@ export default function App() {
 
   return (
     <div className="relative w-full h-screen">
-      <FlightMap />
+      <FlightMap startsAtMs={gameState.startsAtMs} />
       {gameState.startsAtMs !== null && (
         <CountdownOverlay startsAtMs={gameState.startsAtMs} />
       )}

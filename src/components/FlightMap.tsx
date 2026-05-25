@@ -9,7 +9,7 @@ import { easeCubic } from '../utils/easings'
 import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airportLookup.ts'
 import {buildEmitters, getActiveFlights, getCompletedFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
-import SimulationControls from "./SimulationControls.tsx";
+import GameHud from "./GameHud.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
 import {asset} from "../utils/asset.ts";
 
@@ -21,7 +21,11 @@ const INITIAL_VIEW_STATE = {
   zoom: 2,
 }
 
-export default function FlightMap() {
+interface Props {
+  startsAtMs: number | null
+}
+
+export default function FlightMap({ startsAtMs }: Props) {
   const [airports, setAirports] = useState<Airport[]>([])
   const [airportMeta, setAirportMeta] = useState<Map<string, AirportMeta>>(new Map())
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
@@ -34,6 +38,14 @@ export default function FlightMap() {
   const [money, setMoney] = useState(10)
 
   const { simTime, playing, speed, play, pause, setSpeed } = useSimulationClock()
+
+  useEffect(() => {
+    if (startsAtMs === null) return
+    const delay = startsAtMs - Date.now()
+    if (delay <= 0) { play(); return }
+    const id = setTimeout(play, delay)
+    return () => clearTimeout(id)
+  }, [startsAtMs, play])
 
   const zoomRef = useRef(INITIAL_VIEW_STATE.zoom)
   const prevSimTimeRef = useRef<number | null>(null)
@@ -254,15 +266,7 @@ export default function FlightMap() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <SimulationControls
-          simTime={simTime}
-          playing={playing}
-          speed={speed}
-          play={play}
-          pause={pause}
-          setSpeed={setSpeed}
-          money={money}
-      />
+      <GameHud simTime={simTime} money={money} />
 
       <DeckGL
           initialViewState={INITIAL_VIEW_STATE}
