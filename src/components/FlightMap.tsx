@@ -256,7 +256,12 @@ export default function FlightMap() {
   ]
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      backgroundColor: '#68bdd4',
+    }}>
       <SimulationControls
           simTime={simTime}
           playing={playing}
