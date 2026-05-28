@@ -302,7 +302,10 @@ export default function FlightMap() {
  */
 function DeckGLOverlay({ layers }: { layers: Layer[] }) {
   const overlay = useControl(
-      () => new MapboxOverlay({ layers, interleaved: true })
+      () => new MapboxOverlay({
+        layers,
+        interleaved: true,
+        getCursor: ({ isHovering }) => isHovering ? 'pointer' : 'grab' })
   )
   overlay.setProps({ layers })
   return null
