@@ -268,6 +268,8 @@ export default function FlightMap() {
       />
 
       <MapGL
+          maxZoom={5}
+          minZoom={1.7}
           initialViewState={INITIAL_VIEW_STATE}
           mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}
           onMove={({ viewState }) => {
