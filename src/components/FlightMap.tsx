@@ -9,6 +9,7 @@ import { easeCubic } from '../utils/easings'
 import {type Airport, type AirportMeta, loadAirportLookup} from '../utils/airportLookup.ts'
 import {buildEmitters, getActiveFlights, getCompletedFlights, type RouteEmitter} from "../utils/scheduleFlights.ts";
 import {useSimulationClock} from "../hooks/useSimulationClock.ts";
+import {useRoutes} from "../hooks/useRoutes.ts";
 import GameHud from "./GameHud.tsx";
 import MapAttribution from "./MapAttribution.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
@@ -90,56 +91,40 @@ export default function FlightMap({ startsAtMs }: Props) {
       [emitters, simTime],
   )
 
-  /**
-   * Sorted `"ICAO-ICAO"` key → great-circle path for that route.
-   * Built once when emitters arrive for O(1) lookup.
-   */
-  const routePathByKey = useMemo(() => {
-    const map = new Map<string, [number, number][]>()
-    for (const e of emitters) {
-      const key = e.origin < e.destination
-          ? `${e.origin}-${e.destination}`
-          : `${e.destination}-${e.origin}`
-      if (!map.has(key)) map.set(key, e.path)
-    }
-    return map
-  }, [emitters])
-
-  /**
-   * Great-circle paths between every pair of currently selected airports that
-   * has a route between them. Rendered as solid lines on top of the map.
-   */
-  const routePaths = useMemo(() => {
-    const selected = [...purchasedAirportIds]
-    const paths: [number, number][][] = []
-    for (let i = 0; i < selected.length; i++) {
-      for (let j = i + 1; j < selected.length; j++) {
-        const a = selected[i], b = selected[j]
-        const key = a < b ? `${a}-${b}` : `${b}-${a}`
-        const path = routePathByKey.get(key)
-        if (path) paths.push(path)
-      }
-    }
-    return paths
-  }, [purchasedAirportIds, routePathByKey])
+  const { allRoutes, hoveredRoutes, purchasedRoutes, maxRouteFrequency } = useRoutes(
+      emitters,
+      purchasedAirportIds,
+      hoveredAirportId
+  )
 
   const layers = [
     new PathLayer({
-      id: 'flight-ghost-paths',
-      data: emitters,
+      id: 'routes-default',
+      data: allRoutes,
       wrapLongitude: true,
       getPath: e => e.path,
-      getColor: e => {
-        const match = viewMode === 'outgoing' ? e.origin : e.destination
-        if (match === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.4)
-        return TRANSPARENT
-      },
+      getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.3),
       getWidth: 1,
       widthUnits: 'pixels',
-      updateTriggers: { getColor: [hoveredAirportId, viewMode] },
-      transitions: {
-        getColor: { duration: 50, easing: easeCubic },
-      }
+    }),
+    new PathLayer<RouteEmitter>({
+      id: 'routes-hovered',
+      data: hoveredRoutes,
+      wrapLongitude: true,
+      getPath: e => e.path,
+      getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.75),
+      getWidth: e => 1 + (86400 / e.interval / maxRouteFrequency) * 4,
+      widthUnits: 'pixels',
+      widthMinPixels: 1,
+    }),
+    new PathLayer({
+      id: 'routes-purchased',
+      data: purchasedRoutes,
+      wrapLongitude: true,
+      getPath: d => d.path,
+      getColor: withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.6),
+      getWidth: 4,
+      widthUnits: 'pixels',
     }),
     new IconLayer({
       id: 'aircraft',
@@ -156,15 +141,6 @@ export default function FlightMap({ startsAtMs }: Props) {
         if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.6)
         return TRANSPARENT
       },
-    }),
-    new PathLayer({
-      id: 'routes',
-      data: routePaths,
-      wrapLongitude: true,
-      getPath: d => d,
-      getColor: withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.4),
-      getWidth: 3,
-      widthUnits: 'pixels',
     }),
     new IconLayer<Airport>({
       id: 'airports-icon',
