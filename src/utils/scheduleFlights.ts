@@ -110,7 +110,14 @@ export function getActiveFlights(
         const idx = Math.min(Math.floor(raw), last - 1)
         const frac = raw - idx
         const p0 = e.path[idx]
-        const p1 = e.path[idx + 1]
+        const p1raw = e.path[idx + 1]
+
+        // Normalize p1 longitude relative to p0 to avoid antimeridian snap
+        let p1lng = p1raw[0]
+        while (p1lng - p0[0] > 180)  p1lng -= 360
+        while (p1lng - p0[0] < -180) p1lng += 360
+        const p1: [number, number] = [p1lng, p1raw[1]]
+
         const position: [number, number] = [
           p0[0] + (p1[0] - p0[0]) * frac,
           p0[1] + (p1[1] - p0[1]) * frac,

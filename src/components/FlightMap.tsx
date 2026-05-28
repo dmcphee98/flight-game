@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import DeckGL from '@deck.gl/react'
+import { MapboxOverlay } from '@deck.gl/mapbox'
 import { IconLayer, PathLayer, TextLayer } from '@deck.gl/layers'
-import { Map as MapGL } from 'react-map-gl/maplibre'
+import { Map as MapGL, useControl } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MAP_STYLES } from '../../constants/mapStyles.ts'
 import { buildGameData } from '../utils/buildGameData.ts'
@@ -12,6 +12,7 @@ import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import SimulationControls from "./SimulationControls.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
 import {asset} from "../utils/asset.ts";
+import type { Layer } from '@deck.gl/core'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
@@ -113,6 +114,7 @@ export default function FlightMap() {
     new PathLayer({
       id: 'flight-ghost-paths',
       data: emitters,
+      wrapLongitude: true,
       getPath: e => e.path,
       getColor: e => {
         const match = viewMode === 'outgoing' ? e.origin : e.destination
@@ -145,6 +147,7 @@ export default function FlightMap() {
     new PathLayer({
       id: 'routes',
       data: routePaths,
+      wrapLongitude: true,
       getPath: d => d,
       getColor: withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.4),
       getWidth: 3,
@@ -264,9 +267,10 @@ export default function FlightMap() {
           money={money}
       />
 
-      <DeckGL
+      <MapGL
           initialViewState={INITIAL_VIEW_STATE}
-          onViewStateChange={({ viewState }) => {
+          mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}
+          onMove={({ viewState }) => {
             // Toggles label visibility when the zoom level crosses LABEL_ZOOM_THRESHOLD
             const currentZoom = (viewState as { zoom: number }).zoom
             const previousZoom = zoomRef.current
@@ -274,14 +278,27 @@ export default function FlightMap() {
             zoomRef.current = currentZoom
             if (crossed) setLabelsVisible(currentZoom > LABEL_ZOOM_THRESHOLD)
           }}
-          getCursor={({ isHovering }) => isHovering ? 'pointer' : 'grab'}
-          controller={true}
-          layers={layers}
       >
-        <MapGL mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}/>
-      </DeckGL>
+
+        <DeckGLOverlay layers={layers} />
+      </MapGL>
     </div>
   )
+}
+
+/**
+ * Renders deck.gl layers inside a MapLibre map via MapboxOverlay.
+ *
+ * Using MapboxOverlay rather than the standalone DeckGL component means
+ * deck.gl renders within MapLibre's GL context, inheriting world-copy
+ * rendering so layers appear on all map copies and across the antimeridian.
+ */
+function DeckGLOverlay({ layers }: { layers: Layer[] }) {
+  const overlay = useControl(
+      () => new MapboxOverlay({ layers, interleaved: true })
+  )
+  overlay.setProps({ layers })
+  return null
 }
 
 /** Deterministic rotation using id characters so it never changes between renders */
