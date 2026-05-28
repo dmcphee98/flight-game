@@ -29,104 +29,40 @@ export interface GameData {
 }
 
 /**
- * Fetches the route graph, picks a random seed airport, then greedily expands
- * by adding the highest-frequency unvisited neighbor until `count` airports
- * are selected, skipping any candidate that falls within the elliptical exclusion
- * zone of an already-selected airport.
+ * Builds the core game data from the route graph asset.
  *
- * Returns selected ICAO codes and all routes between them.
+ * Loads the airport route graph, flattens it into a list of routes, then
+ * derives a relative "price" score for each airport based on its total route
+ * frequency (i.e., how busy it is).
  *
- * @param count - Number of airports to select.
- * @param minFreq - Minimum route frequency to consider an edge traversable.
- * @param minLatSep - Minimum latitude separation in degrees between any two selected airports.
- * @param minLonSep - Minimum longitude separation in degrees between any two selected airports.
- * @param priceScaling - Controls the relationship between an airport's traffic and its purchase price.
- *    `-1` = sublinear (expensive airports underpriced relative to income),
- *    `0` = linear (price proportional to income),
- *    `+1` = superlinear (expensive airports overpriced relative to income). */
+ * @param priceScaling - Controls the power-curve exponent applied to the
+ *   normalized frequency score before mapping it to a price.
+ *   - `0` → linear (prices spread evenly across the range)
+ *   - `> 0` → exponent > 1, prices cluster toward the cheap end
+ *   - `< 0` → exponent < 1, prices cluster toward the expensive end
+ * @returns Resolved {@link GameData} containing the full list of ICAO codes,
+ *   all routes, and the computed price map keyed by ICAO code.
+ */
 export async function buildGameData(
-  count = 100,
-  minFreq = 1,
-  minLatSep = 2,
-  minLonSep = 4,
   priceScaling = 1,
 ): Promise<GameData> {
-  const [rawGraph, airportsData] = await Promise.all([
-    fetch(asset('data/route_graph.json')).then(r => r.json()) as Promise<AirportGraph>,
-    fetch(asset('data/airports.json')).then(r => r.json()) as Promise<{ airports: [string, string, number, number, number][] }>,
-  ])
+  const rawGraph = await fetch(asset('data/route_graph.json')).then(r => r.json()) as AirportGraph
 
-  const coords = new Map<string, { lat: number; lon: number }>()
-  for (const [icao, , lat, lon] of airportsData.airports)
-    coords.set(icao, { lat, lon })
-
-  /**
-   * Returns true if airports `a` and `b` are too close to appear together in a route.
-   *
-   * Closeness is defined by an elliptical exclusion zone. Any candidate inside the
-   * ellipse is rejected
-   *
-   * Pass 0 for either axis to disable that constraint entirely.
-   */
-  const tooClose = (a: string, b: string): boolean => {
-    const ca = coords.get(a), cb = coords.get(b)
-    if (!ca || !cb) return false
-    const dLat = minLatSep > 0 ? (ca.lat - cb.lat) / minLatSep : 0
-    const dLon = minLonSep > 0 ? (ca.lon - cb.lon) / minLonSep : 0
-    return dLat * dLat + dLon * dLon < 1
-  }
-
-  const graph = new Map<string, Map<string, GraphEdge>>()
-  for (const [orig, dests] of Object.entries(rawGraph)) {
-    for (const [dest, edge] of Object.entries(dests)) {
-      if (edge.f < minFreq) continue
-      if (!graph.has(orig)) graph.set(orig, new Map())
-      graph.get(orig)!.set(dest, edge)
-    }
-  }
-
-  const nodes = [...graph.keys()]
-  const seed = nodes[Math.floor(Math.random() * nodes.length)]
-
-  const selected = new Set<string>([seed])
-  const seen = new Set<string>([seed])
-  const frontier = new Map<string, number>()
-
-  const expand = (icao: string) => {
-    for (const [dest, edge] of graph.get(icao) ?? []) {
-      if (!seen.has(dest))
-        frontier.set(dest, Math.max(frontier.get(dest) ?? 0, edge.f))
-    }
-  }
-
-  expand(seed)
-
-  while (selected.size < count && frontier.size > 0) {
-    let best = '', bestFreq = -1
-    for (const [icao, freq] of frontier)
-      if (freq > bestFreq) { best = icao; bestFreq = freq }
-    frontier.delete(best)
-    seen.add(best)
-    expand(best)
-    if ([...selected].some(s => tooClose(s, best))) continue
-    selected.add(best)
-  }
-
+  const icaoCodes = Object.keys(rawGraph)
   const routes: Route[] = []
   const priceAccum = new Map<string, number>()
-  for (const [origin, destinations] of graph) {
-    if (!selected.has(origin)) continue
-    for (const [dest, edge] of destinations) {
-      if (!selected.has(dest)) continue
+
+  for (const [origin, destinations] of Object.entries(rawGraph)) {
+    for (const [destination, edge] of Object.entries(destinations)) {
       routes.push({
-        origin: origin,
-        destination: dest,
+        origin,
+        destination,
         frequency: edge.f,
         distance: edge.d,
-        duration: edge.t
+        duration: edge.t,
       })
       priceAccum.set(origin, (priceAccum.get(origin) ?? 0) + edge.f)
-      priceAccum.set(dest, (priceAccum.get(dest) ?? 0) + edge.f)
+      priceAccum.set(destination, (priceAccum.get(destination) ?? 0) + edge.f)
     }
   }
 
@@ -136,10 +72,11 @@ export async function buildGameData(
   const range = max - min
   const exponent = priceScaling >= 0 ? 1 + priceScaling : 1 / (1 - priceScaling)
   const prices = new Map<string, number>(
-      [...priceAccum].map(([icao, total]) => [
-        icao,
-        range === 0 ? 50 : 1 + Math.round(Math.pow((total - min) / range, exponent) * 98),
-      ]),
+    [...priceAccum].map(([icao, total]) => [
+      icao,
+      range === 0 ? 50 : 1 + Math.round(Math.pow((total - min) / range, exponent) * 98),
+    ]),
   )
-  return { icaoCodes: [...selected], routes, prices }
+
+  return { icaoCodes, routes, prices }
 }
