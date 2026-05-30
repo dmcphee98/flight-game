@@ -15,9 +15,9 @@ import MapAttribution from "./MapAttribution.tsx";
 import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
 import {asset} from "../utils/asset.ts";
 import type { Layer } from '@deck.gl/core'
+import { RouteConfirmCard, type PendingRoute } from './RouteConfirmCard.tsx'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
-
 
 const INITIAL_VIEW_STATE = {
   longitude: 5,
@@ -39,8 +39,11 @@ export default function FlightMap({ startsAtMs }: Props) {
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
   const [fontReady, setFontReady] = useState(false)
   const [prices, setPrices] = useState<Map<string, number>>(new Map())
-  const [money, setMoney] = useState(10)
+  const [money, setMoney] = useState(1000)
   const [hoveredRouteEmitter, setHoveredRouteEmitter] = useState<RouteEmitter | null>(null)
+  const [pendingRoute, setPendingRoute] = useState<PendingRoute | null>(null)
+
+  const pendingCardRef = useRef<HTMLDivElement>(null)
 
   const { simTime, play } = useSimulationClock()
 
@@ -54,6 +57,17 @@ export default function FlightMap({ startsAtMs }: Props) {
 
   const zoomRef = useRef(INITIAL_VIEW_STATE.zoom)
   const prevSimTimeRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!pendingRoute) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (pendingCardRef.current && !pendingCardRef.current.contains(e.target as Node)) {
+        setPendingRoute(null)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [pendingRoute])
 
   useEffect(() => {
     document.fonts.load('bold 18px "Courier Prime"').then(() => setFontReady(true))
@@ -93,11 +107,12 @@ export default function FlightMap({ startsAtMs }: Props) {
       [emitters, simTime],
   )
 
-  const { allRoutes, hoveredRoutes, purchasedRoutes} = useRoutes(
+  const { allRoutes, hoveredRoutes, pendingRoutes, purchasedRoutes} = useRoutes(
       emitters,
       purchasedAirportIds,
       hoveredAirportId,
       hoveredRouteEmitter,
+      pendingRoute
   )
 
   const layers = [
@@ -111,13 +126,21 @@ export default function FlightMap({ startsAtMs }: Props) {
       widthUnits: 'pixels',
       pickable: true,
       onHover: (info) => setHoveredRouteEmitter(info.object ?? null),
+      onClick: (info) => {
+        if (!info.object) return
+        const { origin, destination } = info.object
+        const unpurchased = [origin, destination].filter(id => !purchasedAirportIds.has(id))
+        if (unpurchased.length === 0) return
+        const totalCost = unpurchased.reduce((sum, id) => sum + (prices.get(id) ?? 0), 0)
+        setPendingRoute({ x: info.x, y: info.y, origin, destination, unpurchased, totalCost })
+      },
       updateTriggers: {
         getWidth: labelsVisible,
       },
     }),
     new PathLayer<RouteEmitter>({
       id: 'routes-hovered',
-      data: hoveredRoutes,
+      data:[...hoveredRoutes, ...pendingRoutes],
       wrapLongitude: true,
       getPath: e => e.path,
       getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.75),
@@ -147,7 +170,11 @@ export default function FlightMap({ startsAtMs }: Props) {
         const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
         if (purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
         if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
-        if (hoveredRouteEmitter && flightOnRoute(f, hoveredRouteEmitter)) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
+        const onRoute = (e: RouteEmitter | null) => !!e && (
+            (f.origin === e.origin && f.destination === e.destination) ||
+            (f.origin === e.destination && f.destination === e.origin)
+        )
+        if (onRoute(hoveredRouteEmitter) || onRoute(pendingRoutes[0])) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
         return TRANSPARENT
       },
     }),
@@ -246,6 +273,23 @@ export default function FlightMap({ startsAtMs }: Props) {
       backgroundColor: '#68bdd4',
     }}>
       <GameHud simTime={simTime} money={money} />
+      {pendingRoute && (
+          <RouteConfirmCard
+              pending={pendingRoute}
+              cardRef={pendingCardRef}
+              canAfford={money >= pendingRoute.totalCost}
+              onCancel={() => setPendingRoute(null)}
+              onBuy={() => {
+                setPurchasedAirportIds(prev => {
+                  const next = new Set(prev)
+                  pendingRoute.unpurchased.forEach(id => next.add(id))
+                  return next
+                })
+                setMoney(m => m - pendingRoute.totalCost)
+                setPendingRoute(null)
+              }}
+          />
+      )}
 
       <MapGL
           maxZoom={5}
@@ -254,6 +298,7 @@ export default function FlightMap({ startsAtMs }: Props) {
           mapStyle={MAP_STYLES.STADIA_STAMEN_WATERCOLOR}
           attributionControl={false}
           onMove={({ viewState }) => {
+            setPendingRoute(null)
             // Toggles label visibility when the zoom level crosses LABEL_ZOOM_THRESHOLD
             const currentZoom = (viewState as { zoom: number }).zoom
             const previousZoom = zoomRef.current
@@ -295,9 +340,4 @@ function airportRotation(icao: string): number {
       .split('')
       .reduce((acc, c) => acc * 31 + c.charCodeAt(0), 0)
   return Math.abs(hash) % 360
-}
-
-function flightOnRoute(f: { origin: string; destination: string }, e: RouteEmitter): boolean {
-  return (f.origin === e.origin && f.destination === e.destination)
-      || (f.origin === e.destination && f.destination === e.origin)
 }

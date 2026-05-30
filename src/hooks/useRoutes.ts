@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { RouteEmitter } from '../utils/scheduleFlights.ts'
+import type {PendingRoute} from "../components/RouteConfirmCard.tsx";
 
 /**
  * Derives the route sets needed by the map layers from raw emitter data.
@@ -11,13 +12,13 @@ import type { RouteEmitter } from '../utils/scheduleFlights.ts'
  * @param purchasedAirportIds - Set of ICAO codes the player currently owns.
  * @param hoveredAirportId - ICAO of the airport under the cursor, or `null`.
  * @param hoveredRouteEmitter - Emitter directly hovered on the path layer, or `null`.
+ * @param pendingRoute - Origin/destination of the clicked route awaiting confirmation, or `null`.
  *
  * @returns
  * - `allRoutes` — every unique route; stable reference until emitters change.
- * - `purchasedRoutes` — routes where the player owns both endpoints.
- * - `hoveredRoutes` — routes touching the hovered airport; empty array when none.
- * - `pendingRouteEmitter` — emitter matching the pending route, or `null`.
- * - `effectiveHoveredRoutes` — union of `hoveredRoutes` and `hoveredRouteEmitter` for the hovered path layer.
+ * - `purchasedRoutes` — routes which have been purchased by the player.
+ * - `hoveredRoutes` — routes which are currently hovered.
+ * - `pendingRoutes` — routes which are pending purchase.
  * - `maxRouteFrequency` — highest flights-per-day across all routes, used to
  *   normalize width in the hover layer.
  */
@@ -26,6 +27,7 @@ export function useRoutes(
   purchasedAirportIds: Set<string>,
   hoveredAirportId: string | null,
   hoveredRouteEmitter: RouteEmitter | null,
+  pendingRoute: PendingRoute | null,
 ) {
   const routeToEmitterMap = useMemo(() => {
     const map = new Map<string, RouteEmitter>()
@@ -75,10 +77,19 @@ export function useRoutes(
     return [...hoveredAirportRoutes, hoveredRouteEmitter]
   }, [hoveredAirportRoutes, hoveredRouteEmitter])
 
+  const pendingRoutes = useMemo(() => {
+    if (!pendingRoute) return []
+    const { origin, destination } = pendingRoute
+    const key = origin < destination ? `${origin}-${destination}` : `${destination}-${origin}`
+    const emitter = routeToEmitterMap.get(key)
+    return emitter ? [emitter] : []
+  }, [routeToEmitterMap, pendingRoute])
+
+
   const maxRouteFrequency = useMemo(
     () => allRoutes.reduce((max, e) => Math.max(max, 86400 / e.interval), 1),
     [allRoutes],
   )
 
-  return { allRoutes, hoveredRoutes, purchasedRoutes, maxRouteFrequency }
+  return { allRoutes, hoveredRoutes, pendingRoutes, purchasedRoutes, maxRouteFrequency }
 }
