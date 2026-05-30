@@ -12,10 +12,11 @@ import {useSimulationClock} from "../hooks/useSimulationClock.ts";
 import {useRoutes} from "../hooks/useRoutes.ts";
 import GameHud from "./GameHud.tsx";
 import MapAttribution from "./MapAttribution.tsx";
-import { MAP_COLORS, withAlpha, TRANSPARENT } from '../utils/mapColors.ts'
+import { MAP_COLORS, withAlpha, TRANSPARENT, priceColor, frequencyColor } from '../utils/mapColors.ts'
 import {asset} from "../utils/asset.ts";
 import type { Layer } from '@deck.gl/core'
 import { RouteConfirmCard, type PendingRoute } from './RouteConfirmCard.tsx'
+import LensToolbar, { type ActiveLens } from './LensToolbar.tsx'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
@@ -42,6 +43,7 @@ export default function FlightMap({ startsAtMs }: Props) {
   const [money, setMoney] = useState(1000)
   const [hoveredRouteEmitter, setHoveredRouteEmitter] = useState<RouteEmitter | null>(null)
   const [pendingRoute, setPendingRoute] = useState<PendingRoute | null>(null)
+  const [activeLens, setActiveLens] = useState<ActiveLens>('none')
 
   const pendingCardRef = useRef<HTMLDivElement>(null)
 
@@ -76,6 +78,8 @@ export default function FlightMap({ startsAtMs }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'x') setViewMode(m => m === 'outgoing' ? 'incoming' : 'outgoing')
+      if (e.key === 'p') setActiveLens(l => l === 'price' ? 'none' : 'price')
+      if (e.key === 'f') setActiveLens(l => l === 'frequency' ? 'none' : 'frequency')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -118,7 +122,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     return ids
   }, [purchasedRouteKeys])
 
-  const { allRoutes, hoveredRoutes, pendingRoutes, purchasedRoutes} = useRoutes(
+  const { allRoutes, hoveredRoutes, pendingRoutes, purchasedRoutes, maxRouteFrequency } = useRoutes(
       emitters,
       purchasedRouteKeys,
       hoveredAirportId,
@@ -132,8 +136,17 @@ export default function FlightMap({ startsAtMs }: Props) {
       data: allRoutes,
       wrapLongitude: true,
       getPath: e => e.path,
-      getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.3),
-      getWidth: labelsVisible ? 4 : 1,
+      getColor: (e: RouteEmitter) => {
+        if (activeLens === 'price') {
+          const key = e.origin < e.destination ? `${e.origin}-${e.destination}` : `${e.destination}-${e.origin}`
+          return priceColor(prices.get(key) ?? 50, 1)
+        }
+        if (activeLens === 'frequency') {
+          return frequencyColor(86400 / e.interval, maxRouteFrequency, 1)
+        }
+        return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.3)
+      },
+      getWidth: labelsVisible ? (activeLens !== 'none' ? 5 : 4) : (activeLens !== 'none' ? 2 : 1),
       widthUnits: 'pixels',
       pickable: true,
       onHover: (info) => setHoveredRouteEmitter(info.object ?? null),
@@ -146,11 +159,13 @@ export default function FlightMap({ startsAtMs }: Props) {
         setPendingRoute({ x: info.x, y: info.y, origin, destination, totalCost })
       },
       updateTriggers: {
-        getWidth: labelsVisible,
+        getWidth: [labelsVisible, activeLens],
+        getColor: [activeLens, prices],
       },
     }),
     new PathLayer<RouteEmitter>({
       id: 'routes-hovered',
+      visible: activeLens === 'none',
       data:[...hoveredRoutes, ...pendingRoutes],
       wrapLongitude: true,
       getPath: e => e.path,
@@ -161,6 +176,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     }),
     new PathLayer({
       id: 'routes-purchased',
+      visible: activeLens === 'none',
       data: purchasedRoutes,
       wrapLongitude: true,
       getPath: d => d.path,
@@ -170,6 +186,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     }),
     new IconLayer({
       id: 'aircraft',
+      visible: activeLens === 'none',
       data: activeFlights,
       getPosition: f => f.position,
       getIcon: () => ({
@@ -200,16 +217,20 @@ export default function FlightMap({ startsAtMs }: Props) {
       getSize: 100000,
       sizeUnits: 'meters',
       sizeMinPixels: 8,
+      pickable: true,
       sizeMaxPixels: 20,
       getAngle: d => airportMeta.get(d.icao)?.iconRotation ?? 0,
-      getColor: d => purchasedAirportIds.has(d.icao)
+      getColor: d => {
+        if (activeLens !== 'none') return [0, 0, 0, 255]
+        return purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_SECONDARY, 1)
-          : withAlpha(MAP_COLORS.DEFAULT_SECONDARY, 1),
+          : withAlpha(MAP_COLORS.DEFAULT_SECONDARY, 1)
+      },
       onHover: (info) => {
         setHoveredAirportId(info.object ? info.object.icao : null);
       },
       updateTriggers: {
-        getColor: purchasedRouteKeys.size,
+        getColor: [purchasedRouteKeys.size, activeLens],
       },
       transitions: {
         getSize: { duration: 150, easing: easeCubic },
@@ -217,7 +238,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     }),
     new IconLayer<Airport>({
       id: 'airport-tag-background-icon',
-      visible: labelsVisible,
+      visible: labelsVisible && activeLens === 'none',
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getIcon: () => ({
@@ -230,7 +251,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     }),
     new IconLayer<Airport>({
       id: 'airports-tag-icon',
-      visible: labelsVisible,
+      visible: labelsVisible && activeLens === 'none',
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getIcon: () => ({
@@ -248,7 +269,7 @@ export default function FlightMap({ startsAtMs }: Props) {
     }),
     new TextLayer<Airport>({
       id: 'airports-tag-iata',
-      visible: labelsVisible,
+      visible: labelsVisible && activeLens === 'none',
       data: airports,
       getPosition: d => [d.lon, d.lat],
       getText: d => d.iata,
@@ -275,6 +296,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       backgroundColor: '#68bdd4',
     }}>
       <GameHud simTime={simTime} money={money} />
+      <LensToolbar activeLens={activeLens} onSelect={setActiveLens} />
       {pendingRoute && (
           <RouteConfirmCard
               pending={pendingRoute}
