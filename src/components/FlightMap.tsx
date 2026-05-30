@@ -17,6 +17,7 @@ import {asset} from "../utils/asset.ts";
 import type { Layer } from '@deck.gl/core'
 import { RouteConfirmCard, type PendingRoute } from './RouteConfirmCard.tsx'
 import LensToolbar, { type ActiveLens } from './LensToolbar.tsx'
+import MapLensEffect from './MapLensEffect.tsx'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
@@ -332,6 +333,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       >
 
         <DeckGLOverlay layers={layers} />
+        <MapLensEffect activeLens={activeLens} />
       </MapGL>
       <MapAttribution />
     </div>
