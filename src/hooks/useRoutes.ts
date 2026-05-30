@@ -9,7 +9,7 @@ import type {PendingRoute} from "../components/RouteConfirmCard.tsx";
  * internally using a sorted `"ICAO-ICAO"` key before building any derived data.
  *
  * @param emitters - All route emitters produced by {@link buildEmitters}.
- * @param purchasedAirportIds - Set of ICAO codes the player currently owns.
+ * @param purchasedRouteKeys - Set of sorted `"ORIG-DEST"` keys for purchased routes.
  * @param hoveredAirportId - ICAO of the airport under the cursor, or `null`.
  * @param hoveredRouteEmitter - Emitter directly hovered on the path layer, or `null`.
  * @param pendingRoute - Origin/destination of the clicked route awaiting confirmation, or `null`.
@@ -24,7 +24,7 @@ import type {PendingRoute} from "../components/RouteConfirmCard.tsx";
  */
 export function useRoutes(
   emitters: RouteEmitter[],
-  purchasedAirportIds: Set<string>,
+  purchasedRouteKeys: Set<string>,
   hoveredAirportId: string | null,
   hoveredRouteEmitter: RouteEmitter | null,
   pendingRoute: PendingRoute | null,
@@ -42,19 +42,13 @@ export function useRoutes(
 
   const allRoutes = useMemo(() => [...routeToEmitterMap.values()], [routeToEmitterMap])
 
-  const purchasedRoutes = useMemo(() => {
-    const selected = [...purchasedAirportIds]
-    const routes: RouteEmitter[] = []
-    for (let i = 0; i < selected.length; i++) {
-      for (let j = i + 1; j < selected.length; j++) {
-        const a = selected[i], b = selected[j]
-        const key = a < b ? `${a}-${b}` : `${b}-${a}`
-        const route = routeToEmitterMap.get(key)
-        if (route) routes.push(route)
-      }
-    }
-    return routes
-  }, [purchasedAirportIds, routeToEmitterMap])
+  const purchasedRoutes = useMemo(
+    () => allRoutes.filter(e => {
+      const key = e.origin < e.destination ? `${e.origin}-${e.destination}` : `${e.destination}-${e.origin}`
+      return purchasedRouteKeys.has(key)
+    }),
+    [allRoutes, purchasedRouteKeys],
+  )
 
   const airportToEmitterMap = useMemo(() => {
     const map = new Map<string, RouteEmitter[]>()

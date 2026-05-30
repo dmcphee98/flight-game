@@ -33,7 +33,7 @@ export default function FlightMap({ startsAtMs }: Props) {
   const [airports, setAirports] = useState<Airport[]>([])
   const [airportMeta, setAirportMeta] = useState<Map<string, AirportMeta>>(new Map())
   const [hoveredAirportId, setHoveredAirportId] = useState<string | null>(null)
-  const [purchasedAirportIds, setPurchasedAirportIds] = useState<Set<string>>(new Set())
+  const [purchasedRouteKeys, setPurchasedRouteKeys] = useState<Set<string>>(new Set())
   const [emitters, setEmitters] = useState<RouteEmitter[]>([])
   const [viewMode, setViewMode] = useState<'outgoing' | 'incoming'>('outgoing')
   const [labelsVisible, setLabelsVisible] = useState(INITIAL_VIEW_STATE.zoom > LABEL_ZOOM_THRESHOLD)
@@ -85,11 +85,12 @@ export default function FlightMap({ startsAtMs }: Props) {
     const prev = prevSimTimeRef.current
     prevSimTimeRef.current = simTime
     if (prev === null) return
-    const earned = getCompletedFlights(emitters, prev, simTime).filter(
-      f => purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)
-    ).length
+    const earned = getCompletedFlights(emitters, prev, simTime).filter(f => {
+      const key = f.origin < f.destination ? `${f.origin}-${f.destination}` : `${f.destination}-${f.origin}`
+      return purchasedRouteKeys.has(key)
+    }).length
     if (earned > 0) setMoney(m => m + earned)
-  }, [simTime, emitters, purchasedAirportIds])
+  }, [simTime, emitters, purchasedRouteKeys])
 
   useEffect(() => {
     Promise.all([loadAirportLookup(), buildGameData()]).then(
@@ -107,9 +108,19 @@ export default function FlightMap({ startsAtMs }: Props) {
       [emitters, simTime],
   )
 
+  // Derived from purchased routes for airport dot/label coloring.
+  const purchasedAirportIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const key of purchasedRouteKeys) {
+      const [a, b] = key.split('-')
+      ids.add(a); ids.add(b)
+    }
+    return ids
+  }, [purchasedRouteKeys])
+
   const { allRoutes, hoveredRoutes, pendingRoutes, purchasedRoutes} = useRoutes(
       emitters,
-      purchasedAirportIds,
+      purchasedRouteKeys,
       hoveredAirportId,
       hoveredRouteEmitter,
       pendingRoute
@@ -129,10 +140,10 @@ export default function FlightMap({ startsAtMs }: Props) {
       onClick: (info) => {
         if (!info.object) return
         const { origin, destination } = info.object
-        const unpurchased = [origin, destination].filter(id => !purchasedAirportIds.has(id))
-        if (unpurchased.length === 0) return
-        const totalCost = unpurchased.reduce((sum, id) => sum + (prices.get(id) ?? 0), 0)
-        setPendingRoute({ x: info.x, y: info.y, origin, destination, unpurchased, totalCost })
+        const key = origin < destination ? `${origin}-${destination}` : `${destination}-${origin}`
+        if (purchasedRouteKeys.has(key)) return
+        const totalCost = prices.get(key) ?? 0
+        setPendingRoute({ x: info.x, y: info.y, origin, destination, totalCost })
       },
       updateTriggers: {
         getWidth: labelsVisible,
@@ -168,7 +179,8 @@ export default function FlightMap({ startsAtMs }: Props) {
       getAngle: f => -f.heading,
       getColor: f => {
         const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
-        if (purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
+        const routeKey = f.origin < f.destination ? `${f.origin}-${f.destination}` : `${f.destination}-${f.origin}`
+        if (purchasedRouteKeys.has(routeKey)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
         if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
         const onRoute = (e: RouteEmitter | null) => !!e && (
             (f.origin === e.origin && f.destination === e.destination) ||
@@ -193,21 +205,11 @@ export default function FlightMap({ startsAtMs }: Props) {
       getColor: d => purchasedAirportIds.has(d.icao)
           ? withAlpha(MAP_COLORS.SELECTED_SECONDARY, 1)
           : withAlpha(MAP_COLORS.DEFAULT_SECONDARY, 1),
-      pickable: true,
-      onClick: (info) => {
-        if (!info.object) return
-        const id = info.object.icao
-        if (purchasedAirportIds.has(id)) return
-        const price = prices.get(id) ?? 0
-        if (money < price) return
-        setPurchasedAirportIds(prev => new Set(prev).add(id))
-        setMoney(m => m - price)
-      },
       onHover: (info) => {
         setHoveredAirportId(info.object ? info.object.icao : null);
       },
       updateTriggers: {
-        getColor: purchasedAirportIds.size,
+        getColor: purchasedRouteKeys.size,
       },
       transitions: {
         getSize: { duration: 150, easing: easeCubic },
@@ -241,7 +243,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       sizeUnits: 'pixels',
       getPixelOffset: [60, 0],
       updateTriggers: {
-        getColor: purchasedAirportIds.size,
+        getColor: purchasedRouteKeys.size,
       },
     }),
     new TextLayer<Airport>({
@@ -260,7 +262,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       fontFamily: fontReady ? 'Courier Prime' : 'monospace',
       fontWeight: 'bold',
       updateTriggers: {
-        getColor: purchasedAirportIds.size,
+        getColor: purchasedRouteKeys.size,
       },
     }),
   ]
@@ -280,11 +282,10 @@ export default function FlightMap({ startsAtMs }: Props) {
               canAfford={money >= pendingRoute.totalCost}
               onCancel={() => setPendingRoute(null)}
               onBuy={() => {
-                setPurchasedAirportIds(prev => {
-                  const next = new Set(prev)
-                  pendingRoute.unpurchased.forEach(id => next.add(id))
-                  return next
-                })
+                const key = pendingRoute.origin < pendingRoute.destination
+                  ? `${pendingRoute.origin}-${pendingRoute.destination}`
+                  : `${pendingRoute.destination}-${pendingRoute.origin}`
+                setPurchasedRouteKeys(prev => new Set(prev).add(key))
                 setMoney(m => m - pendingRoute.totalCost)
                 setPendingRoute(null)
               }}

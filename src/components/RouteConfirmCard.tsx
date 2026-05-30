@@ -6,7 +6,6 @@ export interface PendingRoute {
   y: number
   origin: string
   destination: string
-  unpurchased: string[]
   totalCost: number
 }
 
