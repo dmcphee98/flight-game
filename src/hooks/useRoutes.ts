@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { RouteEmitter } from '../utils/scheduleFlights.ts'
 
 /**
- * Derives the three route sets needed by the map layers from raw emitter data.
+ * Derives the route sets needed by the map layers from raw emitter data.
  *
  * Emitters are bidirectional (one per direction), so the hook deduplicates them
  * internally using a sorted `"ICAO-ICAO"` key before building any derived data.
@@ -10,11 +10,14 @@ import type { RouteEmitter } from '../utils/scheduleFlights.ts'
  * @param emitters - All route emitters produced by {@link buildEmitters}.
  * @param purchasedAirportIds - Set of ICAO codes the player currently owns.
  * @param hoveredAirportId - ICAO of the airport under the cursor, or `null`.
+ * @param hoveredRouteEmitter - Emitter directly hovered on the path layer, or `null`.
  *
  * @returns
  * - `allRoutes` — every unique route; stable reference until emitters change.
  * - `purchasedRoutes` — routes where the player owns both endpoints.
  * - `hoveredRoutes` — routes touching the hovered airport; empty array when none.
+ * - `pendingRouteEmitter` — emitter matching the pending route, or `null`.
+ * - `effectiveHoveredRoutes` — union of `hoveredRoutes` and `hoveredRouteEmitter` for the hovered path layer.
  * - `maxRouteFrequency` — highest flights-per-day across all routes, used to
  *   normalize width in the hover layer.
  */
@@ -22,6 +25,7 @@ export function useRoutes(
   emitters: RouteEmitter[],
   purchasedAirportIds: Set<string>,
   hoveredAirportId: string | null,
+  hoveredRouteEmitter: RouteEmitter | null,
 ) {
   const routeToEmitterMap = useMemo(() => {
     const map = new Map<string, RouteEmitter>()
@@ -61,15 +65,20 @@ export function useRoutes(
     return map
   }, [allRoutes])
 
-  const hoveredRoutes = useMemo(
+  const hoveredAirportRoutes = useMemo(
     () => (hoveredAirportId ? airportToEmitterMap.get(hoveredAirportId) ?? [] : []),
     [hoveredAirportId, airportToEmitterMap],
   )
+
+  const hoveredRoutes = useMemo(() => {
+    if (!hoveredRouteEmitter || hoveredAirportRoutes.includes(hoveredRouteEmitter)) return hoveredAirportRoutes
+    return [...hoveredAirportRoutes, hoveredRouteEmitter]
+  }, [hoveredAirportRoutes, hoveredRouteEmitter])
 
   const maxRouteFrequency = useMemo(
     () => allRoutes.reduce((max, e) => Math.max(max, 86400 / e.interval), 1),
     [allRoutes],
   )
 
-  return { allRoutes, purchasedRoutes, hoveredRoutes, maxRouteFrequency }
+  return { allRoutes, hoveredRoutes, purchasedRoutes, maxRouteFrequency }
 }

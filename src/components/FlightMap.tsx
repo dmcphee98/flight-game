@@ -18,6 +18,7 @@ import type { Layer } from '@deck.gl/core'
 
 const LABEL_ZOOM_THRESHOLD = 4.5
 
+
 const INITIAL_VIEW_STATE = {
   longitude: 5,
   latitude: 20,
@@ -39,6 +40,7 @@ export default function FlightMap({ startsAtMs }: Props) {
   const [fontReady, setFontReady] = useState(false)
   const [prices, setPrices] = useState<Map<string, number>>(new Map())
   const [money, setMoney] = useState(10)
+  const [hoveredRouteEmitter, setHoveredRouteEmitter] = useState<RouteEmitter | null>(null)
 
   const { simTime, play } = useSimulationClock()
 
@@ -91,21 +93,27 @@ export default function FlightMap({ startsAtMs }: Props) {
       [emitters, simTime],
   )
 
-  const { allRoutes, hoveredRoutes, purchasedRoutes, maxRouteFrequency } = useRoutes(
+  const { allRoutes, hoveredRoutes, purchasedRoutes} = useRoutes(
       emitters,
       purchasedAirportIds,
-      hoveredAirportId
+      hoveredAirportId,
+      hoveredRouteEmitter,
   )
 
   const layers = [
-    new PathLayer({
+    new PathLayer<RouteEmitter>({
       id: 'routes-default',
       data: allRoutes,
       wrapLongitude: true,
       getPath: e => e.path,
       getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.3),
-      getWidth: 1,
+      getWidth: labelsVisible ? 4 : 1,
       widthUnits: 'pixels',
+      pickable: true,
+      onHover: (info) => setHoveredRouteEmitter(info.object ?? null),
+      updateTriggers: {
+        getWidth: labelsVisible,
+      },
     }),
     new PathLayer<RouteEmitter>({
       id: 'routes-hovered',
@@ -113,7 +121,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       wrapLongitude: true,
       getPath: e => e.path,
       getColor: withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.75),
-      getWidth: e => 1 + (86400 / e.interval / maxRouteFrequency) * 4,
+      getWidth: labelsVisible ? 4 : 2,
       widthUnits: 'pixels',
       widthMinPixels: 1,
     }),
@@ -133,12 +141,13 @@ export default function FlightMap({ startsAtMs }: Props) {
       getIcon: () => ({
         url: asset('plane.svg'), width: 64, height: 64, mask: true
       }),
-      getSize: 16,
+      getSize: 18,
       getAngle: f => -f.heading,
       getColor: f => {
         const hoverMatch = viewMode === 'outgoing' ? f.origin : f.destination
-        if (purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.6)
-        if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 0.6)
+        if (purchasedAirportIds.has(f.origin) && purchasedAirportIds.has(f.destination)) return withAlpha(MAP_COLORS.SELECTED_PRIMARY, 0.8)
+        if (hoverMatch === hoveredAirportId) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
+        if (hoveredRouteEmitter && flightOnRoute(f, hoveredRouteEmitter)) return withAlpha(MAP_COLORS.DEFAULT_PRIMARY, 1)
         return TRANSPARENT
       },
     }),
@@ -149,7 +158,7 @@ export default function FlightMap({ startsAtMs }: Props) {
       getIcon: () => ({
         url: asset('dot.png'), width: 128, height: 128, mask: true
       }),
-      getSize: d => d.icao === hoveredAirportId ? 120000 : 100000,
+      getSize: 100000,
       sizeUnits: 'meters',
       sizeMinPixels: 8,
       sizeMaxPixels: 20,
@@ -171,7 +180,6 @@ export default function FlightMap({ startsAtMs }: Props) {
         setHoveredAirportId(info.object ? info.object.icao : null);
       },
       updateTriggers: {
-        getSize: hoveredAirportId,
         getColor: purchasedAirportIds.size,
       },
       transitions: {
@@ -228,20 +236,6 @@ export default function FlightMap({ startsAtMs }: Props) {
         getColor: purchasedAirportIds.size,
       },
     }),
-    new TextLayer<Airport>({
-      id: 'airports-tag-price',
-      visible: labelsVisible,
-      data: airports,
-      getPosition: d => [d.lon, d.lat],
-      getText: d => `\u00A2${(prices.get(d.icao) ?? 0).toString().padStart(2, '0')}`,
-      getSize: 18,
-      sizeUnits: 'pixels',
-      getColor: [240, 240, 240, 255],
-      getPixelOffset: [103, 1],
-      getTextAnchor: 'end',
-      fontFamily: fontReady ? 'Courier Prime' : 'monospace',
-      fontWeight: 'bold',
-    }),
   ]
 
   return (
@@ -288,6 +282,7 @@ function DeckGLOverlay({ layers }: { layers: Layer[] }) {
       () => new MapboxOverlay({
         layers,
         interleaved: true,
+        pickingRadius: 10,
         getCursor: ({ isHovering }) => isHovering ? 'pointer' : 'grab' })
   )
   overlay.setProps({ layers })
@@ -300,4 +295,9 @@ function airportRotation(icao: string): number {
       .split('')
       .reduce((acc, c) => acc * 31 + c.charCodeAt(0), 0)
   return Math.abs(hash) % 360
+}
+
+function flightOnRoute(f: { origin: string; destination: string }, e: RouteEmitter): boolean {
+  return (f.origin === e.origin && f.destination === e.destination)
+      || (f.origin === e.destination && f.destination === e.origin)
 }
