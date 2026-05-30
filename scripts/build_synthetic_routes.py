@@ -11,20 +11,22 @@ Inputs:
     public/data/shortlisted_airport_codes.ts
     public/data/airports.json
 Output:
-    public/data/route_graph.json  {orig: {dest: {f, d, t}}}
+    public/data/route_graph.json  {orig: {dest: {f, d, t, p}}}
 
   f – estimated daily flight frequency
   d – great-circle distance in km
   t – estimated flight duration in minutes
+  p – base purchase price (1–99), derived from frequency and hub connectivity
 
 Usage:
     python scripts/build_synthetic_routes.py [airports_ts] [airports_json] [output_json]
 """
 
 import json
-import math
 import re
 import sys
+import random
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -140,10 +142,12 @@ def flight_time_minutes(dist_km: float) -> float:
 
 
 def flight_frequency(dist_km: float) -> float:
-    # Falls off with distance; exponent 0.4 is close to historical data for major hubs
-    freq = BASE_FREQ * (1000.0 / max(dist_km, 200.0)) ** 0.4
-    return round(max(0.05, freq), 2)
-
+    if dist_km < 800:
+        return round(random.uniform(8, 20), 2)
+    elif dist_km < 2500:
+        return round(random.uniform(3, 10), 2)
+    else:
+        return round(random.uniform(0.5, 4), 2)
 
 def load_airport_coords(airports_path: str) -> dict[str, tuple[float, float]]:
     with open(airports_path, encoding='utf-8') as f:
@@ -157,6 +161,38 @@ def load_airport_coords(airports_path: str) -> dict[str, tuple[float, float]]:
         for row in data['airports']
         if row[i_icao]
     }
+
+
+def _embed_prices(graph: dict) -> None:
+    """Compute a base price for each undirected route and write it as 'p' on both directed edges.
+
+    Score = avg_frequency × sqrt(avg_degree).  Higher-frequency hub corridors cost more.
+    Scores are normalized to the range [1, 99].
+    """
+    degree = {node: len(edges) for node, edges in graph.items()}
+
+    pairs: set[tuple[str, str]] = set()
+    for orig, edges in graph.items():
+        for dest in edges:
+            pairs.add((min(orig, dest), max(orig, dest)))
+
+    scores: dict[tuple[str, str], float] = {}
+    for a, b in pairs:
+        f_ab = graph.get(a, {}).get(b, {}).get('f', 0)
+        f_ba = graph.get(b, {}).get(a, {}).get('f', 0)
+        avg_freq = (f_ab + f_ba) / 2
+        avg_deg  = (degree.get(a, 1) + degree.get(b, 1)) / 2
+        scores[(a, b)] = avg_freq * math.sqrt(avg_deg)
+
+    all_scores = list(scores.values())
+    min_s, max_s = min(all_scores), max(all_scores)
+    range_s = max_s - min_s
+
+    for (a, b), score in scores.items():
+        normalised = (score - min_s) / range_s if range_s > 0 else 0
+        price = 1 + round(normalised * 98)
+        if b in graph.get(a, {}): graph[a][b]['p'] = price
+        if a in graph.get(b, {}): graph[b][a]['p'] = price
 
 
 def build_graph(
@@ -236,6 +272,8 @@ def build_graph(
         for a, b in ((orig, dest), (dest, orig)):
             if graph[a].pop(b, None) is not None:
                 print(f"FORCE_DISCONNECT removed: {a} → {b}")
+
+    _embed_prices(graph)
 
     edge_count = sum(len(v) for v in graph.values())
     degrees = sorted(len(v) for v in graph.values())

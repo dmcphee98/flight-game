@@ -1,6 +1,6 @@
 import {asset} from "./asset.ts";
 
-type GraphEdge = { f: number; d: number; t?: number }
+type GraphEdge = { f: number; d: number; t?: number; p: number }
 type AirportGraph = Record<string, Record<string, GraphEdge>>
 
 /** A route between two airports in the route network. */
@@ -24,59 +24,33 @@ export interface Route {
 export interface GameData {
   icaoCodes: string[]
   routes: Route[]
-  /** Integer price per airport, derived from total inbound + outbound flight frequencies in this subgraph. */
+  /** Base price per route, keyed by sorted `"ORIG-DEST"` ICAO pair. Values are in the range [1, 99]. */
   prices: Map<string, number>
 }
 
 /**
  * Builds the core game data from the route graph asset.
  *
- * Loads the airport route graph, flattens it into a list of routes, then
- * derives a relative "price" score for each airport based on its total route
- * frequency (i.e., how busy it is).
+ * Loads the route graph JSON, flattens it into a list of routes, and reads the
+ * pre-computed base price for each route (embedded by `build_synthetic_routes.py`).
  *
- * @param priceScaling - Controls the power-curve exponent applied to the
- *   normalized frequency score before mapping it to a price.
- *   - `0` → linear (prices spread evenly across the range)
- *   - `> 0` → exponent > 1, prices cluster toward the cheap end
- *   - `< 0` → exponent < 1, prices cluster toward the expensive end
  * @returns Resolved {@link GameData} containing the full list of ICAO codes,
- *   all routes, and the computed price map keyed by ICAO code.
+ *   all routes, and the price map keyed by sorted `"ORIG-DEST"` ICAO pair.
  */
-export async function buildGameData(
-  priceScaling = 1,
-): Promise<GameData> {
+export async function buildGameData(): Promise<GameData> {
   const rawGraph = await fetch(asset('data/route_graph.json')).then(r => r.json()) as AirportGraph
 
   const icaoCodes = Object.keys(rawGraph)
   const routes: Route[] = []
-  const priceAccum = new Map<string, number>()
+  const prices = new Map<string, number>()
 
   for (const [origin, destinations] of Object.entries(rawGraph)) {
     for (const [destination, edge] of Object.entries(destinations)) {
-      routes.push({
-        origin,
-        destination,
-        frequency: edge.f,
-        distance: edge.d,
-        duration: edge.t,
-      })
-      priceAccum.set(origin, (priceAccum.get(origin) ?? 0) + edge.f)
-      priceAccum.set(destination, (priceAccum.get(destination) ?? 0) + edge.f)
+      routes.push({ origin, destination, frequency: edge.f, distance: edge.d, duration: edge.t })
+      const key = origin < destination ? `${origin}-${destination}` : `${destination}-${origin}`
+      if (!prices.has(key)) prices.set(key, edge.p)
     }
   }
-
-  const totals = [...priceAccum.values()]
-  const min = Math.min(...totals)
-  const max = Math.max(...totals)
-  const range = max - min
-  const exponent = priceScaling >= 0 ? 1 + priceScaling : 1 / (1 - priceScaling)
-  const prices = new Map<string, number>(
-    [...priceAccum].map(([icao, total]) => [
-      icao,
-      range === 0 ? 50 : 1 + Math.round(Math.pow((total - min) / range, exponent) * 98),
-    ]),
-  )
 
   return { icaoCodes, routes, prices }
 }
